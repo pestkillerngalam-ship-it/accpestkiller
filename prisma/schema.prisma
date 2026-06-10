@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Customer {
+  id                String   @id @default(cuid())
+  companyName       String
+  pic               String
+  whatsapp          String
+  email             String
+  address           String
+  npwp              String   @default("")
+  serviceFrequency  String   @default("")
+  monthlyContract   Float    @default(0)
+  status            String   @default("active")
+  notes             String   @default("")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  invoices          Invoice[]
+}
+
+model Invoice {
+  id               String   @id @default(cuid())
+  invoiceNumber    String   @unique
+  customerId       String
+  customer         Customer @relation(fields: [customerId], references: [id])
+  issueDate        DateTime
+  dueDate          DateTime
+  status           String   @default("draft")
+  subtotal         Float    @default(0)
+  taxType          String   @default("none")
+  taxAmount        Float    @default(0)
+  discount         Float    @default(0)
+  total            Float    @default(0)
+  notes            String   @default("")
+  taxInvoiceNumber String   @default("")
+  taxInvoiceDate   DateTime?
+  taxInvoiceStatus String   @default("not_created")
+  taxInvoiceImage  String   @default("")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  items            InvoiceItem[]
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  qty         Int     @default(1)
+  unitPrice   Float   @default(0)
+  total       Float   @default(0)
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  category    String
+  date        DateTime
+  description String
+  amount      Float
+  notes       String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CompanySettings {
+  id              String   @id @default(cuid())
+  companyName     String   @default("PT Pest Killer Ngalam")
+  address         String   @default("")
+  phone           String   @default("")
+  email           String   @default("")
+  website         String   @default("")
+  npwp            String   @default("")
+  logo            String   @default("")
+  stamp           String   @default("")
+  bankName        String   @default("")
+  bankAccount     String   @default("")
+  bankHolder      String   @default("")
+  initialCapital  Float    @default(0)
+  initialBalance  Float    @default(0)
+  updatedAt       DateTime @updatedAt
+}
+
+model TransactionLog {
+  id          String   @id @default(cuid())
+  type        String
+  description String
+  amount      Float
+  date        DateTime
+  createdAt   DateTime @default(now())
+}
