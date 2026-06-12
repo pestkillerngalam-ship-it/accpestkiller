@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useAppStore, PageView } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { useTheme } from 'next-themes';
@@ -29,7 +30,6 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { useState } from 'react';
 
 const navItems: { id: PageView; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
@@ -44,6 +44,28 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const activePage = useAppStore((s) => s.activePage);
   const setActivePage = useAppStore((s) => s.setActivePage);
   const user = useAppStore((s) => s.user);
+  const token = useAppStore((s) => s.token);
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState('PT Pest Killer Ngalam');
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch('/api/settings', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.logo) setCompanyLogo(data.logo);
+          if (data.companyName) setCompanyName(data.companyName);
+        }
+      } catch {
+        // silently fail
+      }
+    };
+    fetchSettings();
+  }, [token]);
 
   const handleNav = (page: PageView) => {
     setActivePage(page);
@@ -53,11 +75,15 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0">
-          <Bug className="w-5 h-5 text-white" />
-        </div>
+        {companyLogo ? (
+          <img src={companyLogo} alt="Logo" className="w-10 h-10 rounded-xl object-cover shrink-0" />
+        ) : (
+          <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0">
+            <Bug className="w-5 h-5 text-white" />
+          </div>
+        )}
         <div className="min-w-0">
-          <h2 className="font-bold text-sm truncate">PT Pest Killer Ngalam</h2>
+          <h2 className="font-bold text-sm truncate">{companyName}</h2>
           <p className="text-xs text-muted-foreground">Akuntansi</p>
         </div>
       </div>

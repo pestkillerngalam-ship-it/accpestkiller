@@ -51,6 +51,9 @@ interface Expense {
   date: string;
   description: string;
   amount: number;
+  taxType: string;
+  taxAmount: number;
+  totalAmount: number;
   notes: string;
 }
 
@@ -59,7 +62,14 @@ const categories = [
   { value: 'bbm', label: 'BBM' },
   { value: 'pestisida', label: 'Pestisida' },
   { value: 'gaji', label: 'Gaji' },
+  { value: 'pajak', label: 'Pajak' },
   { value: 'lainnya', label: 'Lainnya' },
+];
+
+const taxTypes = [
+  { value: 'none', label: 'Tanpa Pajak' },
+  { value: 'ppn12', label: 'PPN 12%' },
+  { value: 'pph23', label: 'PPh Pasal 23 (2%)' },
 ];
 
 const categoryColors: Record<string, string> = {
@@ -67,6 +77,7 @@ const categoryColors: Record<string, string> = {
   bbm: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
   pestisida: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
   gaji: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300',
+  pajak: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
   lainnya: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 };
 
@@ -75,6 +86,9 @@ const emptyExpense = {
   date: new Date().toISOString().split('T')[0],
   description: '',
   amount: 0,
+  taxType: 'none',
+  taxAmount: 0,
+  totalAmount: 0,
   notes: '',
 };
 
@@ -89,6 +103,15 @@ export default function ExpensePage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyExpense);
   const token = useAppStore((s) => s.token);
+
+  // Live tax calculation
+  const calcTax = (amount: number, taxType: string) => {
+    if (taxType === 'ppn12') return Math.round(amount * 0.12);
+    if (taxType === 'pph23') return Math.round(amount * 0.02);
+    return 0;
+  };
+  const liveTax = calcTax(form.amount, form.taxType);
+  const liveTotal = form.amount + liveTax;
 
   useEffect(() => {
     fetchExpenses();
@@ -130,6 +153,9 @@ export default function ExpensePage() {
       date: expense.date?.split('T')[0] || '',
       description: expense.description,
       amount: expense.amount,
+      taxType: expense.taxType || 'none',
+      taxAmount: expense.taxAmount || 0,
+      totalAmount: expense.totalAmount || 0,
       notes: expense.notes,
     });
     setEditId(expense.id);
@@ -138,6 +164,9 @@ export default function ExpensePage() {
 
   const handleSave = async () => {
     try {
+      const taxAmount = calcTax(form.amount, form.taxType);
+      const totalAmount = form.amount + taxAmount;
+
       const url = editId ? `/api/expenses/${editId}` : '/api/expenses';
       const method = editId ? 'PUT' : 'POST';
       const res = await fetch(url, {
@@ -146,7 +175,7 @@ export default function ExpensePage() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, taxAmount, totalAmount }),
       });
       if (!res.ok) throw new Error();
       toast.success(editId ? 'Pengeluaran berhasil diperbarui' : 'Pengeluaran berhasil ditambahkan');
@@ -173,7 +202,8 @@ export default function ExpensePage() {
     }
   };
 
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const totalExpenses = expenses.reduce((s, e) => s + (e.totalAmount || e.amount), 0);
+  const totalTax = expenses.reduce((s, e) => s + (e.taxAmount || 0), 0);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 lg:p-6 space-y-4">
@@ -231,6 +261,7 @@ export default function ExpensePage() {
                       <TableHead>Tanggal</TableHead>
                       <TableHead>Deskripsi</TableHead>
                       <TableHead>Kategori</TableHead>
+                      <TableHead className="hidden md:table-cell">Pajak</TableHead>
                       <TableHead className="text-right">Jumlah</TableHead>
                       <TableHead className="w-20">Aksi</TableHead>
                     </TableRow>
@@ -246,14 +277,29 @@ export default function ExpensePage() {
                           className="border-b transition-colors hover:bg-muted/50"
                         >
                           <TableCell className="text-sm">{formatDateShort(e.date)}</TableCell>
-                          <TableCell>{e.description}</TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium text-sm">{e.description}</p>
+                              {e.taxType && e.taxType !== 'none' && (
+                                <p className="text-xs text-amber-600 mt-0.5">
+                                  +Pajak {e.taxType === 'ppn12' ? 'PPN 12%' : 'PPh 23'}: {formatCurrency(e.taxAmount)}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell>
                             <Badge className={categoryColors[e.category] || ''}>
                               {categories.find((c) => c.value === e.category)?.label || e.category}
                             </Badge>
                           </TableCell>
+                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                            {e.taxType && e.taxType !== 'none'
+                              ? (e.taxType === 'ppn12' ? 'PPN 12%' : 'PPh 23')
+                              : '-'
+                            }
+                          </TableCell>
                           <TableCell className="text-right font-medium text-red-600">
-                            -{formatCurrency(e.amount)}
+                            -{formatCurrency(e.totalAmount || e.amount)}
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
@@ -271,7 +317,10 @@ export default function ExpensePage() {
                   </TableBody>
                 </Table>
               </div>
-              <div className="p-4 border-t flex justify-end">
+              <div className="p-4 border-t flex flex-col sm:flex-row justify-between gap-3">
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <span>Total Pajak: <span className="font-medium text-amber-600">{formatCurrency(totalTax)}</span></span>
+                </div>
                 <div className="text-right">
                   <p className="text-sm text-muted-foreground">Total Pengeluaran</p>
                   <p className="text-xl font-bold text-red-600">-{formatCurrency(totalExpenses)}</p>
@@ -282,6 +331,7 @@ export default function ExpensePage() {
         </CardContent>
       </Card>
 
+      {/* Form Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -311,6 +361,37 @@ export default function ExpensePage() {
               <Label>Jumlah (Rp)</Label>
               <Input type="number" value={form.amount || ''} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) || 0 })} />
             </div>
+            <div className="space-y-2">
+              <Label>Jenis Pajak</Label>
+              <Select value={form.taxType} onValueChange={(v) => setForm({ ...form, taxType: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {taxTypes.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Live Calculation Preview */}
+            {form.taxType !== 'none' && form.amount > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 space-y-1.5">
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Kalkulasi Pajak</p>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Dasar Pengenaan</span>
+                  <span>{formatCurrency(form.amount)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Pajak ({form.taxType === 'ppn12' ? 'PPN 12%' : 'PPh 23'})</span>
+                  <span className="text-amber-600 font-medium">+{formatCurrency(liveTax)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-bold border-t border-amber-200 dark:border-amber-700 pt-1.5">
+                  <span>Total</span>
+                  <span className="text-red-600">{formatCurrency(liveTotal)}</span>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Catatan</Label>
               <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />

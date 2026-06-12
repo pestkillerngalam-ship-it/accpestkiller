@@ -22,17 +22,40 @@ export async function GET(request: NextRequest) {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
 
+    // Fetch settings for initialBalance
+    const settings = await db.companySettings.findFirst();
+    const initialBalance = settings?.initialBalance || 0;
+
     // All invoices
     const allInvoices = await db.invoice.findMany({ include: { customer: true, items: true } });
     const allExpenses = await db.expense.findMany();
     const customers = await db.customer.findMany();
 
-    // KPIs
+    // KPIs - Fix #1: totalExpense uses totalAmount if available, fallback to amount
     const totalIncome = allInvoices.filter(i => i.status === 'paid').reduce((sum, i) => sum + i.total, 0);
-    const totalExpense = allExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalExpense = allExpenses.reduce((sum, e) => sum + (e.totalAmount || e.amount), 0);
     const netProfit = totalIncome - totalExpense;
+    // Fix #1: Saldo = Saldo Awal + Penerimaan - Pengeluaran
+    const cashBalance = initialBalance + totalIncome - totalExpense;
     const totalReceivable = allInvoices.filter(i => i.status !== 'paid').reduce((sum, i) => sum + i.total, 0);
     const activeCustomers = customers.filter(c => c.status === 'active').length;
+
+    // Previous month data for trend indicators
+    const prevMonthDate = new Date(currentYear, currentMonth - 1, 1);
+    const prevM = prevMonthDate.getMonth();
+    const prevY = prevMonthDate.getFullYear();
+    const prevIncome = allInvoices
+      .filter(inv => {
+        const d = new Date(inv.issueDate);
+        return d.getMonth() === prevM && d.getFullYear() === prevY && inv.status === 'paid';
+      })
+      .reduce((s, inv) => s + inv.total, 0);
+    const prevExpense = allExpenses
+      .filter(exp => {
+        const d = new Date(exp.date);
+        return d.getMonth() === prevM && d.getFullYear() === prevY;
+      })
+      .reduce((s, exp) => s + (exp.totalAmount || exp.amount), 0);
 
     // Month income/expense
     const monthInvoices = allInvoices.filter(i => {
@@ -45,7 +68,7 @@ export async function GET(request: NextRequest) {
     });
     const invoiceCountThisMonth = monthInvoices.length;
     const incomeThisMonth = monthInvoices.filter(i => i.status === 'paid').reduce((sum, i) => sum + i.total, 0);
-    const expenseThisMonth = monthExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const expenseThisMonth = monthExpenses.reduce((sum, e) => sum + (e.totalAmount || e.amount), 0);
 
     // Monthly data for charts (last 6 months)
     const monthlyData = [];
@@ -64,7 +87,7 @@ export async function GET(request: NextRequest) {
           const d = new Date(exp.date);
           return d.getMonth() === m && d.getFullYear() === y;
         })
-        .reduce((s, exp) => s + exp.amount, 0);
+        .reduce((s, exp) => s + (exp.totalAmount || exp.amount), 0);
       monthlyData.push({
         month: mDate.toLocaleDateString('id-ID', { month: 'short', year: 'numeric' }),
         income: mIncome,
@@ -73,13 +96,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Expense by category
+    // Expense by category - Fix #2: added 'pajak'
     const expenseCategories = [
-      'operasional', 'bbm', 'pestisida', 'gaji', 'lainnya'
+      'operasional', 'bbm', 'pestisida', 'gaji', 'pajak', 'lainnya'
     ];
     const expenseByCategory = expenseCategories.map(cat => ({
       category: cat,
-      total: allExpenses.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0),
+      total: allExpenses.filter(e => e.category === cat).reduce((s, e) => s + (e.totalAmount || e.amount), 0),
     }));
 
     // Receivable by customer
@@ -97,11 +120,15 @@ export async function GET(request: NextRequest) {
         totalIncome,
         totalExpense,
         netProfit,
+        cashBalance,       // Fix #1: saldo yang benar
+        initialBalance,    // Fix #1: saldo awal
         totalReceivable,
         activeCustomers,
         invoiceCountThisMonth,
         incomeThisMonth,
         expenseThisMonth,
+        prevIncome,        // untuk trend
+        prevExpense,       // untuk trend
       },
       monthlyData,
       expenseByCategory,

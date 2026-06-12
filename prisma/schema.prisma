@@ -68,14 +68,17 @@ model InvoiceItem {
 }
 
 model Expense {
-  id          String   @id @default(cuid())
-  category    String
-  date        DateTime
-  description String
-  amount      Float
-  notes       String   @default("")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  category     String
+  date         DateTime
+  description  String
+  amount       Float
+  taxType      String   @default("none")
+  taxAmount    Float    @default(0)
+  totalAmount  Float    @default(0)
+  notes        String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model CompanySettings {

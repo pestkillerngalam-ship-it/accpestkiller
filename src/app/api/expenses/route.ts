@@ -36,10 +36,27 @@ export async function POST(request: NextRequest) {
     const decoded = await authenticate(request);
     if (!decoded) return NextResponse.json({ error: 'Tidak terautentikasi' }, { status: 401 });
     const body = await request.json();
+
+    // Calculate tax
+    let taxAmount = 0;
+    const taxType = body.taxType || 'none';
+    if (taxType === 'ppn12') {
+      taxAmount = Math.round(body.amount * 0.12);
+    } else if (taxType === 'pph23') {
+      taxAmount = Math.round(body.amount * 0.02);
+    }
+    const totalAmount = body.amount + taxAmount;
+
     const expense = await db.expense.create({
       data: {
-        ...body,
+        category: body.category,
         date: new Date(body.date),
+        description: body.description,
+        amount: body.amount,
+        taxType,
+        taxAmount,
+        totalAmount,
+        notes: body.notes || '',
       },
     });
 
@@ -47,13 +64,14 @@ export async function POST(request: NextRequest) {
       data: {
         type: 'expense',
         description: body.description,
-        amount: body.amount,
+        amount: totalAmount,
         date: new Date(body.date),
       },
     });
 
     return NextResponse.json(expense, { status: 201 });
-  } catch {
+  } catch (error) {
+    console.error('Expense create error:', error);
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }

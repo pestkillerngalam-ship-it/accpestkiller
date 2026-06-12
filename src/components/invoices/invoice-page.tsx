@@ -205,6 +205,7 @@ export default function InvoicePage() {
                     <TableHead className="hidden md:table-cell">Tanggal</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="hidden lg:table-cell">No. Faktur Pajak</TableHead>
                     <TableHead className="w-28">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -230,6 +231,15 @@ export default function InvoicePage() {
                             <Badge variant={sc.variant} className={sc.className}>
                               {sc.label}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            {inv.taxInvoiceNumber ? (
+                              <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 text-xs">
+                                {inv.taxInvoiceNumber}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
