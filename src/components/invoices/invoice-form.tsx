@@ -13,9 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Trash2, Upload, X, FileCheck, FileText } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getDefaultDueDate, getDefaultDescription, roundToNearestThousand, formatCurrency } from '@/lib/invoice-utils';
 
 interface Customer { id: string; companyName: string; }
 
@@ -36,35 +35,25 @@ interface FormState {
   discount: number;
   notes: string;
   items: InvoiceItemRow[];
-  // Faktur Pajak fields
-  taxInvoiceNumber: string;
-  taxInvoiceDate: string;
-  taxInvoiceImage: string;
 }
 
 const emptyItem = (): InvoiceItemRow => ({
   id: crypto.randomUUID(),
-  description: getDefaultDescription(),
+  description: '',
   qty: 1,
   unitPrice: 0,
   total: 0,
 });
 
-const getEmptyForm = (): FormState => {
-  const today = new Date().toISOString().split('T')[0];
-  return {
-    customerId: '',
-    issueDate: today,
-    dueDate: getDefaultDueDate(today),
-    status: 'unpaid',
-    taxType: 'none',
-    discount: 0,
-    notes: '',
-    items: [emptyItem()],
-    taxInvoiceNumber: '',
-    taxInvoiceDate: today,
-    taxInvoiceImage: '',
-  };
+const emptyForm: FormState = {
+  customerId: '',
+  issueDate: new Date().toISOString().split('T')[0],
+  dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+  status: 'draft',
+  taxType: 'none',
+  discount: 0,
+  notes: '',
+  items: [emptyItem()],
 };
 
 interface Props {
@@ -76,73 +65,8 @@ interface Props {
   token: string | null;
 }
 
-// ============================================================
-// PDF to Image converter (using pdf.js from CDN)
-// ============================================================
-async function convertPdfToImage(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const loadScript = (src: string) => new Promise<void>((res, rej) => {
-      if (document.querySelector(`script[src="${src}"]`)) { res(); return; }
-      const s = document.createElement('script');
-      s.src = src;
-      s.onload = () => res();
-      s.onerror = () => rej(new Error('Failed to load pdf.js'));
-      document.head.appendChild(s);
-    });
-
-    (async () => {
-      try {
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-        const pdfjsLib = (window as any).pdfjsLib;
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const page = await pdf.getPage(1);
-        const scale = 2;
-        const viewport = page.getViewport({ scale });
-
-        const canvas = document.createElement('canvas');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const ctx = canvas.getContext('2d')!;
-
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
-      } catch (err) {
-        reject(err);
-      }
-    })();
-  });
-}
-
-// ============================================================
-// Image auto-process: resize + compress
-// ============================================================
-function processImage(base64: string, maxW = 1400, quality = 0.85): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let w = img.width;
-      let h = img.height;
-      if (w > maxW) {
-        h = Math.round((maxW / w) * h);
-        w = maxW;
-      }
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => resolve(base64);
-    img.src = base64;
-  });
-}
-
 export default function InvoiceForm({ open, onOpenChange, editId, customers, onSave, token }: Props) {
-  const [form, setForm] = useState<FormState>(getEmptyForm);
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -150,7 +74,7 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
       if (editId) {
         fetchInvoice();
       } else {
-        setForm(getEmptyForm());
+        setForm(emptyForm);
       }
     }
   }, [open, editId]);
@@ -180,18 +104,11 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                 total: i.total,
               }))
             : [emptyItem()],
-          taxInvoiceNumber: data.taxInvoiceNumber || '',
-          taxInvoiceDate: data.taxInvoiceDate?.split('T')[0] || '',
-          taxInvoiceImage: data.taxInvoiceImage || '',
         });
       }
     } catch (err) {
       console.error(err);
     }
-  };
-
-  const handleIssueDateChange = (newDate: string) => {
-    setForm({ ...form, issueDate: newDate, dueDate: getDefaultDueDate(newDate) });
   };
 
   const updateItem = (idx: number, field: keyof InvoiceItemRow, value: string | number) => {
@@ -215,82 +132,41 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
     setForm((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }));
   };
 
-  // ============================================================
-  // TAX CALCULATION: 3 modes
-  // ============================================================
   const subtotal = form.items.reduce((s, i) => s + i.total, 0);
-  const taxRate = (form.taxType === 'ppn12' || form.taxType === 'ppn12_exclusive') ? 0.12 : 0;
-  let dpp = 0;
+
+  // Perhitungan pajak berdasarkan 3 metode:
+  // 1. Tanpa Pajak (none): Total = Subtotal
+  // 2. Inclusive PPN (inclusive_ppn): PPN sudah termasuk di harga. DPP = Subtotal / 1.12, PPN = DPP x 12%
+  // 3. Non-Inclusive PPN (non_inclusive_ppn): PPN ditambahkan. DPP = Subtotal, PPN = DPP x 12%, Total = DPP + PPN
+  let dpp = subtotal;
   let taxAmount = 0;
   let total = 0;
+  const PPN_RATE = 0.12;
 
-  if (form.taxType === 'ppn12') {
-    // INCLUSIVE: Harga sudah termasuk PPN
-    // DPP = Subtotal / 1.12, dibulatkan ke atas per 1000
-    dpp = roundToNearestThousand(subtotal / (1 + taxRate));
-    taxAmount = Math.round(dpp * taxRate);
-    total = dpp + taxAmount - form.discount;
-  } else if (form.taxType === 'ppn12_exclusive') {
-    // EXCLUSIVE: Harga belum termasuk PPN (DPP)
-    // PPN ditambahkan di atas DPP
+  if (form.taxType === 'inclusive_ppn') {
+    // Harga sudah termasuk PPN — balik hitung DPP
+    dpp = subtotal / (1 + PPN_RATE);
+    taxAmount = dpp * PPN_RATE;
+    total = subtotal - form.discount; // total = subtotal (sudah include PPN) - diskon
+  } else if (form.taxType === 'non_inclusive_ppn') {
+    // PPN ditambahkan di luar harga
     dpp = subtotal;
-    taxAmount = Math.round(dpp * taxRate);
+    taxAmount = dpp * PPN_RATE;
     total = dpp + taxAmount - form.discount;
   } else {
-    // TANPA PAJAK
+    // Tanpa Pajak
     dpp = subtotal;
+    taxAmount = 0;
     total = subtotal - form.discount;
   }
-
-  // ============================================================
-  // FILE UPLOAD: Image + PDF (auto-convert to image)
-  // ============================================================
-  const [uploading, setUploading] = useState(false);
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('Ukuran file maks 10MB');
-      return;
-    }
-
-    setUploading(true);
-    try {
-      if (file.type === 'application/pdf') {
-        // PDF from Coretax → convert first page to image
-        const imageBase64 = await convertPdfToImage(file);
-        const processed = await processImage(imageBase64);
-        setForm((prev) => ({ ...prev, taxInvoiceImage: processed }));
-        toast.success('Faktur pajak PDF berhasil dikonversi & dioptimasi');
-      } else {
-        // Image file → resize + compress
-        const reader = new FileReader();
-        const base64 = await new Promise<string>((resolve) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
-        const processed = await processImage(base64);
-        setForm((prev) => ({ ...prev, taxInvoiceImage: processed }));
-        toast.success('Faktur pajak berhasil di-upload & dioptimasi');
-      }
-    } catch (err) {
-      console.error('Upload error:', err);
-      toast.error('Gagal memproses file. Coba upload sebagai gambar (JPG/PNG).');
-    } finally {
-      setUploading(false);
-      // Reset input so same file can be re-selected
-      e.target.value = '';
-    }
-  };
 
   const handleSubmit = async () => {
     if (!form.customerId) {
       toast.error('Pilih pelanggan terlebih dahulu');
       return;
     }
-    if (form.items.some((i) => !i.description || i.unitPrice <= 0)) {
-      toast.error('Isi deskripsi dan harga semua item');
+    if (form.items.some((i) => !i.description)) {
+      toast.error('Isi deskripsi semua item');
       return;
     }
     setLoading(true);
@@ -304,23 +180,11 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          customerId: form.customerId,
-          issueDate: form.issueDate,
-          dueDate: form.dueDate,
-          status: form.status,
-          taxType: form.taxType,
-          discount: form.discount,
-          notes: form.notes,
-          items: form.items,
+          ...form,
           subtotal,
           taxAmount,
           total,
-          invoiceNumber: editId ? undefined : '',
-          // Faktur Pajak fields
-          taxInvoiceNumber: form.taxInvoiceNumber,
-          taxInvoiceDate: form.taxInvoiceDate || null,
-          taxInvoiceImage: form.taxInvoiceImage,
-          taxInvoiceStatus: form.taxInvoiceNumber ? 'created' : 'not_created',
+          invoiceNumber: editId ? undefined : '', // server generates
         }),
       });
       if (!res.ok) throw new Error();
@@ -335,21 +199,13 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
 
   const fmt = (n: number) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(n);
 
-  // Tax type label for harga column
-  const hargaLabel = form.taxType === 'ppn12'
-    ? '(sudah termasuk PPN)'
-    : form.taxType === 'ppn12_exclusive'
-      ? '(DPP, belum termasuk PPN)'
-      : '';
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editId ? 'Edit Invoice' : 'Buat Invoice Baru'}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-5">
-          {/* === INFO INVOICE === */}
+        <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2 sm:col-span-2">
               <Label>Pelanggan</Label>
@@ -366,10 +222,10 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             </div>
             <div className="space-y-2">
               <Label>Tanggal Invoice</Label>
-              <Input type="date" value={form.issueDate} onChange={(e) => handleIssueDateChange(e.target.value)} />
+              <Input type="date" value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label>Jatuh Tempo <span className="text-xs text-muted-foreground">(otomatis +10 hari)</span></Label>
+              <Label>Jatuh Tempo</Label>
               <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
             </div>
             <div className="space-y-2">
@@ -389,36 +245,13 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Tanpa Pajak</SelectItem>
-                  <SelectItem value="ppn12">PPN 12% (Inclusive)</SelectItem>
-                  <SelectItem value="ppn12_exclusive">PPN 12% (Exclusive)</SelectItem>
+                  <SelectItem value="inclusive_ppn">Inclusive PPN (PPN di dalam harga)</SelectItem>
+                  <SelectItem value="non_inclusive_ppn">Non-Inclusive PPN (PPN di luar harga)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          {/* Tax explanation */}
-          {form.taxType !== 'none' && (
-            <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 space-y-1">
-              {form.taxType === 'ppn12' && (
-                <>
-                  <p className="font-semibold">PPN Inclusive (Harga sudah termasuk PPN)</p>
-                  <p>DPP = Rp {fmt(subtotal)} / 1,12 = Rp {fmt(subtotal / 1.12)} &rarr; dibulatkan = <strong>Rp {fmt(dpp)}</strong></p>
-                  <p>PPN 12% = Rp {fmt(dpp)} x 12% = <strong>Rp {fmt(taxAmount)}</strong></p>
-                  <p>Total = Rp {fmt(dpp)} + Rp {fmt(taxAmount)} = <strong>Rp {fmt(dpp + taxAmount)}</strong></p>
-                </>
-              )}
-              {form.taxType === 'ppn12_exclusive' && (
-                <>
-                  <p className="font-semibold">PPN Exclusive (Harga belum termasuk PPN / DPP)</p>
-                  <p>DPP = <strong>Rp {fmt(dpp)}</strong></p>
-                  <p>PPN 12% = Rp {fmt(dpp)} x 12% = <strong>Rp {fmt(taxAmount)}</strong></p>
-                  <p>Total = Rp {fmt(dpp)} + Rp {fmt(taxAmount)} = <strong>Rp {fmt(dpp + taxAmount)}</strong></p>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* === ITEM INVOICE === */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <Label className="font-semibold">Item</Label>
@@ -432,7 +265,7 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                   <div className="col-span-12 sm:col-span-5">
                     {idx === 0 && <p className="text-xs text-muted-foreground mb-1">Deskripsi</p>}
                     <Input
-                      placeholder="Jasa Pest Control Bulan ..."
+                      placeholder="Deskripsi layanan"
                       value={item.description}
                       onChange={(e) => updateItem(idx, 'description', e.target.value)}
                     />
@@ -447,9 +280,7 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                     />
                   </div>
                   <div className="col-span-5 sm:col-span-3">
-                    {idx === 0 && <p className="text-xs text-muted-foreground mb-1">
-                      Harga {hargaLabel}
-                    </p>}
+                    {idx === 0 && <p className="text-xs text-muted-foreground mb-1">Harga Satuan</p>}
                     <Input
                       type="number"
                       value={item.unitPrice || ''}
@@ -477,22 +308,35 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             </div>
           </div>
 
-          {/* === TOTALS === */}
           <div className="border rounded-lg p-4 space-y-2 bg-muted/30">
             <div className="flex justify-between text-sm">
               <span>Subtotal</span>
               <span>Rp {fmt(subtotal)}</span>
             </div>
-            {form.taxType !== 'none' && (
+            {form.taxType === 'inclusive_ppn' && (
               <>
                 <div className="flex justify-between text-sm">
-                  <span>DPP</span>
-                  <span>Rp {fmt(dpp)}</span>
+                  <span>DPP (Inclusive PPN 12%)</span>
+                  <span>Rp {fmt(Math.round(dpp))}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>PPN 12%</span>
-                  <span>Rp {fmt(taxAmount)}</span>
+                  <span>Rp {fmt(Math.round(taxAmount))}</span>
                 </div>
+                <p className="text-xs text-muted-foreground">* Harga sudah termasuk PPN 12%</p>
+              </>
+            )}
+            {form.taxType === 'non_inclusive_ppn' && (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span>DPP</span>
+                  <span>Rp {fmt(Math.round(dpp))}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>PPN 12%</span>
+                  <span>Rp {fmt(Math.round(taxAmount))}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">* PPN 12% ditambahkan di luar harga</p>
               </>
             )}
             {form.discount > 0 && (
@@ -507,70 +351,6 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             </div>
           </div>
 
-          {/* === FAKTUR PAJAK (Integrated) === */}
-          <div className="border rounded-lg p-4 space-y-4 bg-amber-50/50 dark:bg-amber-950/20">
-            <div className="flex items-center gap-2">
-              <FileCheck className="w-4 h-4 text-amber-600" />
-              <Label className="font-semibold text-amber-700 dark:text-amber-400">Faktur Pajak</Label>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-sm">Nomor Faktur Pajak</Label>
-                <Input
-                  value={form.taxInvoiceNumber}
-                  onChange={(e) => setForm({ ...form, taxInvoiceNumber: e.target.value })}
-                  placeholder="Masukkan nomor faktur pajak"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm">Tanggal Faktur Pajak</Label>
-                <Input
-                  type="date"
-                  value={form.taxInvoiceDate}
-                  onChange={(e) => setForm({ ...form, taxInvoiceDate: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm">Upload Faktur Pajak</Label>
-              <p className="text-xs text-muted-foreground">
-                Upload file PDF dari Coretax atau gambar. PDF akan otomatis dikonversi ke gambar untuk invoice.
-              </p>
-              {form.taxInvoiceImage ? (
-                <div className="relative inline-block">
-                  <img src={form.taxInvoiceImage} alt="Faktur Pajak" className="max-h-40 rounded-lg border" />
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="absolute -top-2 -right-2 h-6 w-6"
-                    onClick={() => setForm({ ...form, taxInvoiceImage: '' })}
-                  >
-                    <X className="w-3 h-3" />
-                  </Button>
-                </div>
-              ) : (
-                <label className={`flex items-center justify-center w-full h-24 border-2 border-dashed rounded-lg cursor-pointer hover:border-amber-400 hover:bg-amber-50/50 transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                  <div className="text-center">
-                    {uploading ? (
-                      <>
-                        <FileText className="w-6 h-6 mx-auto text-amber-500 mb-1 animate-pulse" />
-                        <p className="text-xs text-amber-600">Mengkonversi PDF...</p>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-6 h-6 mx-auto text-muted-foreground mb-1" />
-                        <p className="text-xs text-muted-foreground">Klik atau drag untuk upload</p>
-                        <p className="text-xs text-muted-foreground">PDF, JPG, PNG (maks 10MB)</p>
-                      </>
-                    )}
-                  </div>
-                  <input type="file" accept=".pdf,image/*" className="hidden" onChange={handleFileUpload} disabled={uploading} />
-                </label>
-              )}
-            </div>
-          </div>
-
-          {/* === CATATAN === */}
           <div className="space-y-2">
             <Label>Diskon (Rp)</Label>
             <Input
@@ -589,13 +369,12 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             />
           </div>
 
-          {/* === SUBMIT === */}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
             <Button
               onClick={handleSubmit}
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={loading || uploading}
+              disabled={loading}
             >
               {loading ? 'Menyimpan...' : 'Simpan'}
             </Button>
