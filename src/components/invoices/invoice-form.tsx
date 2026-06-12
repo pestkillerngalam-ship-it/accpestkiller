@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { hitungPajak } from '@/lib/invoice-utils';
 
 interface Customer { id: string; companyName: string; }
 
@@ -135,37 +136,7 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
   const subtotal = form.items.reduce((s, i) => s + i.total, 0);
 
   // Perhitungan pajak — Mekanisme DPP Nilai Lain (Aturan PPN 12% penyesuaian 11/12)
-  const DPP_FACTOR = 11 / 12;
-  const PPN_RATE = 0.12;
-
-  let dppNilaiLain = 0;
-  let taxAmount = 0;
-  let total = 0;
-
-  if (form.taxType === 'include_pajak') {
-    // Sudah Termasuk Pajak: nilai_input = Total Akhir (Harga Jual + PPN)
-    // tarif efektif = 11% (dari 12% x 11/12)
-    // harga_jual = nilai_input / 1.11
-    // DPP Nilai Lain = (11/12) x harga_jual
-    // PPN = 12% x DPP Nilai Lain
-    const hargaJual = subtotal / 1.11;
-    dppNilaiLain = Math.round(DPP_FACTOR * hargaJual);
-    taxAmount = Math.round(PPN_RATE * dppNilaiLain);
-    total = Math.round(subtotal - form.discount);
-  } else if (form.taxType === 'exclude_pajak') {
-    // Belum Include Pajak: nilai_input = Harga Jual murni sebelum pajak
-    // DPP Nilai Lain = (11/12) x nilai_input
-    // PPN = 12% x DPP Nilai Lain
-    // Total = nilai_input + PPN
-    dppNilaiLain = Math.round(DPP_FACTOR * subtotal);
-    taxAmount = Math.round(PPN_RATE * dppNilaiLain);
-    total = Math.round(subtotal + taxAmount - form.discount);
-  } else {
-    // Tanpa Pajak: DPP = 0, PPN = 0, Total = nilai_input
-    dppNilaiLain = 0;
-    taxAmount = 0;
-    total = Math.round(subtotal - form.discount);
-  }
+  const { dppNilaiLain, ppnTerutang: taxAmount, totalBayar: total } = hitungPajak(subtotal, form.taxType, form.discount);
 
   const handleSubmit = async () => {
     if (!form.customerId) {
