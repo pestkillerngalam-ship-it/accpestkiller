@@ -171,15 +171,39 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Limit to 2MB
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Ukuran gambar maks 2MB');
+    // Limit to 5MB (will be compressed after)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran gambar maks 5MB');
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       if (reader.result) {
-        setForm((prev) => ({ ...prev, taxInvoiceImage: reader.result as string }));
+        const base64 = reader.result as string;
+        // Auto-process: resize to max 1400px wide + compress to JPEG 85%
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxW = 1400;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxW) {
+            h = Math.round((maxW / w) * h);
+            w = maxW;
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(img, 0, 0, w, h);
+          const processed = canvas.toDataURL('image/jpeg', 0.85);
+          setForm((prev) => ({ ...prev, taxInvoiceImage: processed }));
+          toast.success('Faktur pajak berhasil di-upload & dioptimasi');
+        };
+        img.onerror = () => {
+          // Fallback to original
+          setForm((prev) => ({ ...prev, taxInvoiceImage: base64 }));
+        };
+        img.src = base64;
       }
     };
     reader.readAsDataURL(file);
