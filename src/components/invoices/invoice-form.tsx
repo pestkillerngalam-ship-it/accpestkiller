@@ -134,30 +134,37 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
 
   const subtotal = form.items.reduce((s, i) => s + i.total, 0);
 
-  // Perhitungan pajak berdasarkan 3 metode:
-  // 1. Tanpa Pajak (none): Total = Subtotal
-  // 2. Inclusive PPN (inclusive_ppn): PPN sudah termasuk di harga. DPP = Subtotal / 1.12, PPN = DPP x 12%
-  // 3. Non-Inclusive PPN (non_inclusive_ppn): PPN ditambahkan. DPP = Subtotal, PPN = DPP x 12%, Total = DPP + PPN
-  let dpp = subtotal;
-  let taxAmount = 0;
-  let total = 0;
+  // Perhitungan pajak — Mekanisme DPP Nilai Lain (Aturan PPN 12% penyesuaian 11/12)
+  const DPP_FACTOR = 11 / 12;
   const PPN_RATE = 0.12;
 
-  if (form.taxType === 'inclusive_ppn') {
-    // Harga sudah termasuk PPN — balik hitung DPP
-    dpp = subtotal / (1 + PPN_RATE);
-    taxAmount = dpp * PPN_RATE;
-    total = subtotal - form.discount; // total = subtotal (sudah include PPN) - diskon
-  } else if (form.taxType === 'non_inclusive_ppn') {
-    // PPN ditambahkan di luar harga
-    dpp = subtotal;
-    taxAmount = dpp * PPN_RATE;
-    total = dpp + taxAmount - form.discount;
+  let dppNilaiLain = 0;
+  let taxAmount = 0;
+  let total = 0;
+
+  if (form.taxType === 'include_pajak') {
+    // Sudah Termasuk Pajak: nilai_input = Total Akhir (Harga Jual + PPN)
+    // tarif efektif = 11% (dari 12% x 11/12)
+    // harga_jual = nilai_input / 1.11
+    // DPP Nilai Lain = (11/12) x harga_jual
+    // PPN = 12% x DPP Nilai Lain
+    const hargaJual = subtotal / 1.11;
+    dppNilaiLain = Math.round(DPP_FACTOR * hargaJual);
+    taxAmount = Math.round(PPN_RATE * dppNilaiLain);
+    total = Math.round(subtotal - form.discount);
+  } else if (form.taxType === 'exclude_pajak') {
+    // Belum Include Pajak: nilai_input = Harga Jual murni sebelum pajak
+    // DPP Nilai Lain = (11/12) x nilai_input
+    // PPN = 12% x DPP Nilai Lain
+    // Total = nilai_input + PPN
+    dppNilaiLain = Math.round(DPP_FACTOR * subtotal);
+    taxAmount = Math.round(PPN_RATE * dppNilaiLain);
+    total = Math.round(subtotal + taxAmount - form.discount);
   } else {
-    // Tanpa Pajak
-    dpp = subtotal;
+    // Tanpa Pajak: DPP = 0, PPN = 0, Total = nilai_input
+    dppNilaiLain = 0;
     taxAmount = 0;
-    total = subtotal - form.discount;
+    total = Math.round(subtotal - form.discount);
   }
 
   const handleSubmit = async () => {
@@ -245,8 +252,8 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Tanpa Pajak</SelectItem>
-                  <SelectItem value="inclusive_ppn">Inclusive PPN (PPN di dalam harga)</SelectItem>
-                  <SelectItem value="non_inclusive_ppn">Non-Inclusive PPN (PPN di luar harga)</SelectItem>
+                  <SelectItem value="include_pajak">Include Pajak (Sudah Termasuk PPN)</SelectItem>
+                  <SelectItem value="exclude_pajak">Exclude Pajak (Belum Termasuk PPN)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -313,30 +320,30 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
               <span>Subtotal</span>
               <span>Rp {fmt(subtotal)}</span>
             </div>
-            {form.taxType === 'inclusive_ppn' && (
+            {form.taxType === 'include_pajak' && (
               <>
                 <div className="flex justify-between text-sm">
-                  <span>DPP (Inclusive PPN 12%)</span>
-                  <span>Rp {fmt(Math.round(dpp))}</span>
+                  <span>DPP Nilai Lain</span>
+                  <span>Rp {fmt(dppNilaiLain)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>PPN 12%</span>
-                  <span>Rp {fmt(Math.round(taxAmount))}</span>
+                  <span>PPN 12% x DPP Nilai Lain</span>
+                  <span>Rp {fmt(taxAmount)}</span>
                 </div>
-                <p className="text-xs text-muted-foreground">* Harga sudah termasuk PPN 12%</p>
+                <p className="text-xs text-muted-foreground">* Harga sudah termasuk PPN (DPP Nilai Lain 11/12)</p>
               </>
             )}
-            {form.taxType === 'non_inclusive_ppn' && (
+            {form.taxType === 'exclude_pajak' && (
               <>
                 <div className="flex justify-between text-sm">
-                  <span>DPP</span>
-                  <span>Rp {fmt(Math.round(dpp))}</span>
+                  <span>DPP Nilai Lain</span>
+                  <span>Rp {fmt(dppNilaiLain)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>PPN 12%</span>
-                  <span>Rp {fmt(Math.round(taxAmount))}</span>
+                  <span>PPN 12% x DPP Nilai Lain</span>
+                  <span>Rp {fmt(taxAmount)}</span>
                 </div>
-                <p className="text-xs text-muted-foreground">* PPN 12% ditambahkan di luar harga</p>
+                <p className="text-xs text-muted-foreground">* PPN 12% ditambahkan (DPP Nilai Lain 11/12)</p>
               </>
             )}
             {form.discount > 0 && (

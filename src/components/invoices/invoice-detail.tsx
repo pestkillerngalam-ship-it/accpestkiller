@@ -480,13 +480,13 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
         <div class="totals-section">
           <div class="totals-box">
             <div class="row"><span>Subtotal</span><span>${formatCurrency(invoice.subtotal)}</span></div>
-            ${invoice.taxType === 'inclusive_ppn' && invoice.taxAmount > 0 ? `
-              <div class="row"><span>DPP (Inclusive PPN 12%)</span><span>${formatCurrency(Math.round(invoice.subtotal / 1.12))}</span></div>
-              <div class="row"><span>PPN 12%</span><span>${formatCurrency(invoice.taxAmount)}</span></div>
+            ${invoice.taxType === 'include_pajak' && invoice.taxAmount > 0 ? `
+              <div class="row"><span>DPP Nilai Lain (11/12)</span><span>${formatCurrency(Math.round((11/12) * (invoice.subtotal / 1.11)))}</span></div>
+              <div class="row"><span>PPN 12% x DPP Nilai Lain</span><span>${formatCurrency(invoice.taxAmount)}</span></div>
             ` : ''}
-            ${invoice.taxType === 'non_inclusive_ppn' && invoice.taxAmount > 0 ? `
-              <div class="row"><span>DPP</span><span>${formatCurrency(invoice.subtotal)}</span></div>
-              <div class="row"><span>PPN 12%</span><span>${formatCurrency(invoice.taxAmount)}</span></div>
+            ${invoice.taxType === 'exclude_pajak' && invoice.taxAmount > 0 ? `
+              <div class="row"><span>DPP Nilai Lain (11/12)</span><span>${formatCurrency(Math.round((11/12) * invoice.subtotal))}</span></div>
+              <div class="row"><span>PPN 12% x DPP Nilai Lain</span><span>${formatCurrency(invoice.taxAmount)}</span></div>
             ` : ''}
             ${invoice.taxType === 'none' ? `<div class="row"><span>Pajak</span><span>Tanpa Pajak</span></div>` : ''}
             ${invoice.discount > 0 ? `<div class="row"><span>Diskon</span><span>- ${formatCurrency(invoice.discount)}</span></div>` : ''}
@@ -690,29 +690,30 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
                         <span>Subtotal</span>
                         <span>{formatCurrency(invoice.subtotal)}</span>
                       </div>
-                      {invoice.taxType === 'inclusive_ppn' && invoice.taxAmount > 0 && (
+                      {invoice.taxType === 'include_pajak' && invoice.taxAmount > 0 && (
                         <>
-                          <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>DPP (Inclusive PPN 12%)</span>
-                            <span>{formatCurrency(Math.round(invoice.subtotal / 1.12))}</span>
+                          <div className="flex justify-between text-sm">
+                            <span>DPP Nilai Lain (11/12)</span>
+                            <span>{formatCurrency(Math.round((11/12) * (invoice.subtotal / 1.11)))}</span>
                           </div>
-                          <div className="flex justify-between">
-                            <span>PPN 12%</span>
+                          <div className="flex justify-between text-sm">
+                            <span>PPN 12% x DPP Nilai Lain</span>
                             <span>{formatCurrency(invoice.taxAmount)}</span>
                           </div>
-                          <p className="text-xs text-muted-foreground">* Harga sudah termasuk PPN</p>
+                          <p className="text-xs text-muted-foreground">* Harga sudah termasuk PPN (DPP Nilai Lain 11/12)</p>
                         </>
                       )}
-                      {invoice.taxType === 'non_inclusive_ppn' && invoice.taxAmount > 0 && (
+                      {invoice.taxType === 'exclude_pajak' && invoice.taxAmount > 0 && (
                         <>
-                          <div className="flex justify-between">
-                            <span>DPP</span>
-                            <span>{formatCurrency(invoice.subtotal)}</span>
+                          <div className="flex justify-between text-sm">
+                            <span>DPP Nilai Lain (11/12)</span>
+                            <span>{formatCurrency(Math.round((11/12) * invoice.subtotal))}</span>
                           </div>
-                          <div className="flex justify-between">
-                            <span>PPN 12%</span>
+                          <div className="flex justify-between text-sm">
+                            <span>PPN 12% x DPP Nilai Lain</span>
                             <span>{formatCurrency(invoice.taxAmount)}</span>
                           </div>
+                          <p className="text-xs text-muted-foreground">* PPN 12% ditambahkan (DPP Nilai Lain 11/12)</p>
                         </>
                       )}
                       {invoice.taxType === 'none' && (
