@@ -42,9 +42,11 @@ import { toast } from 'sonner';
 interface ReportData {
   kpis: {
     totalIncome: number;
+    allIncome: number;
     totalExpense: number;
     netProfit: number;
     cashBalance: number;
+    neracaCash: number;
     initialBalance: number;
     initialCapital: number;
     totalReceivable: number;
@@ -381,21 +383,23 @@ export default function ReportPage() {
                     <Printer className="w-4 h-4 mr-1" /> Cetak
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => {
-                    const cashBank = data.kpis.cashBalance;
-                    const totalAset = cashBank + data.kpis.totalReceivable;
-                    const modalAwal = data.kpis.initialCapital;
-                    const labaBerjalan = data.kpis.netProfit;
-                    const selisih = totalAset - (modalAwal + labaBerjalan);
+                    const kasBank = data.kpis.neracaCash || 0;
+                    const piutang = data.kpis.totalReceivable;
+                    const totalAset = kasBank + piutang;
+                    const modalAwal = data.kpis.initialCapital || 0;
+                    const labaBerjalan = (data.kpis.allIncome || 0) - data.kpis.totalExpense;
+                    const totalModal = modalAwal + labaBerjalan;
+                    const selisih = totalAset - totalModal;
                     exportCSV('neraca', [
                       ['Aset', 'Jumlah'],
-                      ['Kas & Bank', cashBank.toString()],
-                      ['Piutang Usaha', data.kpis.totalReceivable.toString()],
+                      ['Kas & Bank', kasBank.toString()],
+                      ['Piutang Usaha', piutang.toString()],
                       ['Total Aset', totalAset.toString()],
                       ['', ''],
                       ['Modal', 'Jumlah'],
                       ['Modal Awal', modalAwal.toString()],
                       ['Laba/(Rugi) Berjalan', labaBerjalan.toString()],
-                      ['Total Modal', (modalAwal + labaBerjalan).toString()],
+                      ['Total Modal', totalModal.toString()],
                       ['', ''],
                       ['Selisih', selisih.toString()],
                     ]);
@@ -407,12 +411,17 @@ export default function ReportPage() {
             </CardHeader>
             <CardContent>
               {(() => {
-                const cashBank = data.kpis.cashBalance || 0;
-                const totalAset = cashBank + data.kpis.totalReceivable;
+                // Neraca (Balance Sheet) — Accrual basis
+                // Kas & Bank = Modal Awal + Pendapatan Lunas - Pengeluaran
+                const kasBank = data.kpis.neracaCash || 0;
+                const piutang = data.kpis.totalReceivable;
+                const totalAset = kasBank + piutang;
+                // Laba Berjalan = Semua Pendapatan (lunas + belum) - Pengeluaran
                 const modalAwal = data.kpis.initialCapital || 0;
-                const labaBerjalan = data.kpis.netProfit;
+                const labaBerjalan = (data.kpis.allIncome || 0) - data.kpis.totalExpense;
                 const totalModal = modalAwal + labaBerjalan;
                 const selisih = totalAset - totalModal;
+                const isBalanced = Math.abs(selisih) < 1; // Handle floating point
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
@@ -422,13 +431,13 @@ export default function ReportPage() {
                           <TableRow>
                             <TableCell className="text-muted-foreground">Kas & Bank</TableCell>
                             <TableCell className="text-right font-medium">
-                              {formatCurrency(cashBank)}
+                              {formatCurrency(kasBank)}
                             </TableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell className="text-muted-foreground">Piutang Usaha</TableCell>
                             <TableCell className="text-right font-medium">
-                              {formatCurrency(data.kpis.totalReceivable)}
+                              {formatCurrency(piutang)}
                             </TableCell>
                           </TableRow>
                           <TableRow className="font-bold bg-emerald-50 dark:bg-emerald-950/30">
@@ -462,7 +471,14 @@ export default function ReportPage() {
                               {formatCurrency(totalModal)}
                             </TableCell>
                           </TableRow>
-                          {selisih !== 0 && (
+                          {isBalanced && (
+                            <TableRow className="bg-emerald-50 dark:bg-emerald-950/30">
+                              <TableCell className="text-emerald-700 dark:text-emerald-400 font-medium" colSpan={2}>
+                                ✓ Neraca Seimbang (Aset = Modal)
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {!isBalanced && selisih !== 0 && (
                             <TableRow className="bg-amber-50 dark:bg-amber-950/30">
                               <TableCell className="text-amber-700 dark:text-amber-400 font-medium">Selisih (Aset - Modal)</TableCell>
                               <TableCell className={`text-right font-medium ${selisih > 0 ? 'text-amber-600' : 'text-red-600'}`}>
@@ -472,11 +488,6 @@ export default function ReportPage() {
                           )}
                         </TableBody>
                       </Table>
-                      {selisih !== 0 && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          * Selisih muncul jika Saldo Awal Kas berbeda dengan Modal Awal. Pastikan kedua nilai sudah diisi dengan benar di Pengaturan.
-                        </p>
-                      )}
                     </div>
                   </div>
                 );

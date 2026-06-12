@@ -34,10 +34,13 @@ export async function GET(request: NextRequest) {
 
     // KPIs - Fix #1: totalExpense uses totalAmount if available, fallback to amount
     const totalIncome = allInvoices.filter(i => i.status === 'paid').reduce((sum, i) => sum + i.total, 0);
+    const allIncome = allInvoices.reduce((sum, i) => sum + i.total, 0); // Semua invoice (paid + unpaid) untuk Neraca
     const totalExpense = allExpenses.reduce((sum, e) => sum + (e.totalAmount || e.amount), 0);
     const netProfit = totalIncome - totalExpense;
     // Fix #1: Saldo = Saldo Awal + Penerimaan - Pengeluaran
     const cashBalance = initialBalance + totalIncome - totalExpense;
+    // Neraca: Kas & Bank menggunakan initialCapital sebagai dasar (bukan initialBalance)
+    const neracaCash = initialCapital + totalIncome - totalExpense;
     const totalReceivable = allInvoices.filter(i => i.status !== 'paid').reduce((sum, i) => sum + i.total, 0);
     const activeCustomers = customers.filter(c => c.status === 'active').length;
 
@@ -119,9 +122,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       kpis: {
         totalIncome,
+        allIncome,         // Semua invoice (paid + unpaid) untuk Neraca accrual
         totalExpense,
         netProfit,
-        cashBalance,       // Saldo kas saat ini
+        cashBalance,       // Saldo kas saat ini (untuk dashboard)
+        neracaCash,        // Kas & Bank untuk Neraca (basis initialCapital)
         initialBalance,    // Saldo awal kas/bank
         initialCapital,    // Modal awal perusahaan (neraca)
         totalReceivable,

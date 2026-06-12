@@ -106,84 +106,125 @@ function generatePrintHTML(invoice: Invoice, settings: CompanySettings | null) {
   const ppn = Math.round(dpp * taxRate);
   const grandTotal = dpp + ppn - (invoice.discount || 0);
 
+  // Check if tax invoice image is provided — if so, use compact layout for 1-page feel
+  const hasTaxImage = !!invoice.taxInvoiceImage;
+  const compactMode = hasTaxImage;
+
   return `
     <!DOCTYPE html>
     <html>
     <head>
       <title>Invoice ${invoice.invoiceNumber}</title>
       <style>
-        @page { size: A4; margin: 12mm 15mm; }
+        @page { size: A4; margin: 10mm 14mm 10mm 14mm; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 10.5pt; line-height: 1.5; }
+        body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: ${compactMode ? '9.5pt' : '10pt'}; line-height: 1.45; }
 
-        /* Header */
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20pt; padding-bottom: 14pt; border-bottom: 3px solid #059669; }
-        .header-left { display: flex; align-items: flex-start; gap: 12pt; }
-        .header-left img { max-height: 55pt; max-width: 70pt; object-fit: contain; margin-top: 2pt; }
-        .header-left .company-name { font-size: 15pt; font-weight: 800; color: #059669; letter-spacing: 0.5pt; }
-        .header-left .company-desc { font-size: 8pt; color: #666; margin-top: 2pt; letter-spacing: 1pt; text-transform: uppercase; }
-        .header-left .company-info { font-size: 8pt; color: #555; line-height: 1.7; margin-top: 4pt; }
-        .header-right { text-align: right; }
-        .header-right .invoice-label { font-size: 22pt; font-weight: 800; color: #059669; letter-spacing: 3pt; }
-        .header-right .invoice-meta { font-size: 9pt; color: #444; margin-top: 6pt; line-height: 1.8; }
-        .header-right .invoice-meta .due-date { color: #dc2626; font-weight: 700; }
+        /* ===== HEADER ===== */
+        .header {
+          display: flex; justify-content: space-between; align-items: flex-start;
+          margin-bottom: ${compactMode ? '10pt' : '16pt'};
+          padding-bottom: ${compactMode ? '8pt' : '12pt'};
+          border-bottom: 2.5px solid #1a1a1a;
+        }
+        .header-left { display: flex; align-items: flex-start; gap: 10pt; }
+        .header-left img { max-height: ${compactMode ? '42pt' : '50pt'}; max-width: 60pt; object-fit: contain; }
+        .company-name { font-size: ${compactMode ? '13pt' : '14pt'}; font-weight: 800; color: #1a1a1a; letter-spacing: 0.3pt; }
+        .company-tagline { font-size: ${compactMode ? '7pt' : '7.5pt'}; color: #666; margin-top: 1pt; letter-spacing: 0.8pt; text-transform: uppercase; font-weight: 600; }
+        .company-info { font-size: ${compactMode ? '7.5pt' : '8pt'}; color: #555; line-height: 1.6; margin-top: 3pt; }
+        .header-right { text-align: right; min-width: 160pt; }
+        .invoice-title { font-size: ${compactMode ? '20pt' : '22pt'}; font-weight: 800; color: #059669; letter-spacing: 2pt; }
+        .invoice-meta { font-size: ${compactMode ? '8pt' : '8.5pt'}; color: #333; margin-top: 4pt; line-height: 1.8; }
+        .invoice-meta .due { color: #dc2626; font-weight: 700; }
 
-        /* Tax Invoice Number Badge */
-        .tax-badge { display: inline-block; background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; padding: 3pt 12pt; border-radius: 4pt; font-size: 8.5pt; font-weight: 700; margin-bottom: 14pt; letter-spacing: 0.3pt; }
+        /* ===== TAX BADGE ===== */
+        .tax-badge {
+          display: inline-block; background: #fffbeb; border: 1px solid #fcd34d;
+          color: #92400e; padding: 2pt 10pt; border-radius: 3pt;
+          font-size: ${compactMode ? '7.5pt' : '8pt'}; font-weight: 700;
+          margin-bottom: ${compactMode ? '8pt' : '12pt'}; letter-spacing: 0.2pt;
+        }
 
-        /* Customer Box */
-        .customer-box { background: #f0fdf4; border-left: 4px solid #059669; border-radius: 0 6pt 6pt 0; padding: 12pt 16pt; margin-bottom: 14pt; }
-        .customer-box .label { font-size: 7.5pt; color: #888; text-transform: uppercase; letter-spacing: 1.5pt; margin-bottom: 3pt; font-weight: 600; }
-        .customer-box .name { font-weight: 700; font-size: 11pt; }
-        .customer-box .detail { font-size: 9pt; color: #555; line-height: 1.7; margin-top: 2pt; }
+        /* ===== CUSTOMER ===== */
+        .customer-box {
+          background: #f9fafb; border-left: 3px solid #059669;
+          border-radius: 0 4pt 4pt 0;
+          padding: ${compactMode ? '8pt 12pt' : '10pt 14pt'};
+          margin-bottom: ${compactMode ? '8pt' : '12pt'};
+        }
+        .customer-label { font-size: ${compactMode ? '6.5pt' : '7pt'}; color: #888; text-transform: uppercase; letter-spacing: 1.5pt; margin-bottom: 2pt; font-weight: 600; }
+        .customer-name { font-weight: 700; font-size: ${compactMode ? '10pt' : '10.5pt'}; }
+        .customer-detail { font-size: ${compactMode ? '8pt' : '8.5pt'}; color: #555; line-height: 1.6; margin-top: 1pt; }
 
-        /* Items Table */
-        table.items { width: 100%; border-collapse: collapse; margin-bottom: 18pt; }
-        table.items thead th { background: #059669; color: white; padding: 8pt 10pt; text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.5pt; font-weight: 600; }
-        table.items th.right, table.items td.right { text-align: right; }
-        table.items th.center, table.items td.center { text-align: center; }
-        table.items td { padding: 8pt 10pt; border-bottom: 1px solid #e5e7eb; font-size: 10pt; }
-        table.items tbody tr:nth-child(even) td { background: #f9fafb; }
-        table.items tbody tr:last-child td { border-bottom: 2px solid #059669; }
+        /* ===== ITEMS TABLE ===== */
+        table.items { width: 100%; border-collapse: collapse; margin-bottom: ${compactMode ? '10pt' : '14pt'}; }
+        table.items thead th {
+          background: #1a1a1a; color: white;
+          padding: ${compactMode ? '5pt 8pt' : '6pt 8pt'};
+          text-align: left; font-size: ${compactMode ? '7.5pt' : '8pt'};
+          text-transform: uppercase; letter-spacing: 0.4pt; font-weight: 600;
+        }
+        .r { text-align: right; }
+        .c { text-align: center; }
+        table.items td {
+          padding: ${compactMode ? '5pt 8pt' : '6pt 8pt'};
+          border-bottom: 1px solid #e5e7eb; font-size: ${compactMode ? '9pt' : '9.5pt'};
+        }
+        table.items tbody tr:nth-child(even) td { background: #fafafa; }
+        table.items tbody tr:last-child td { border-bottom: 2px solid #1a1a1a; }
 
-        /* Totals */
-        .totals { display: flex; justify-content: flex-end; margin-bottom: 14pt; }
-        .totals-box { width: 260pt; }
-        .totals-row { display: flex; justify-content: space-between; padding: 3.5pt 0; font-size: 10pt; color: #444; }
-        .totals-row.grand { border-top: 2px solid #1a1a1a; padding-top: 8pt; margin-top: 4pt; font-weight: 800; font-size: 13pt; color: #1a1a1a; }
-        .totals-row.grand .amount { color: #059669; }
+        /* ===== TOTALS ===== */
+        .totals { display: flex; justify-content: flex-end; margin-bottom: ${compactMode ? '8pt' : '12pt'}; }
+        .totals-box { width: 240pt; }
+        .totals-row { display: flex; justify-content: space-between; padding: 2.5pt 0; font-size: ${compactMode ? '9pt' : '9.5pt'}; color: #444; }
+        .totals-row.grand {
+          border-top: 2px solid #1a1a1a; padding-top: 6pt; margin-top: 3pt;
+          font-weight: 800; font-size: ${compactMode ? '11pt' : '12pt'}; color: #1a1a1a;
+        }
+        .totals-row.grand .val { color: #059669; }
 
-        /* Terbilang */
-        .terbilang { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6pt; padding: 10pt 16pt; margin-bottom: 14pt; }
-        .terbilang .label { font-size: 7.5pt; color: #888; text-transform: uppercase; letter-spacing: 1pt; }
-        .terbilang .value { font-size: 10pt; font-weight: 600; color: #059669; font-style: italic; }
+        /* ===== TERBILANG ===== */
+        .terbilang {
+          background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4pt;
+          padding: ${compactMode ? '6pt 12pt' : '8pt 14pt'};
+          margin-bottom: ${compactMode ? '8pt' : '12pt'};
+        }
+        .terbilang .lbl { font-size: ${compactMode ? '6.5pt' : '7pt'}; color: #888; text-transform: uppercase; letter-spacing: 0.8pt; }
+        .terbilang .val { font-size: ${compactMode ? '8.5pt' : '9pt'}; font-weight: 600; color: #333; font-style: italic; }
 
-        /* Bank Info */
-        .bank-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6pt; padding: 12pt 16pt; margin-bottom: 6pt; }
-        .bank-box .label { font-size: 7.5pt; color: #888; text-transform: uppercase; letter-spacing: 1pt; margin-bottom: 4pt; font-weight: 600; }
-        .bank-box .bank-detail { font-size: 10pt; font-weight: 600; }
-        .bank-box .bank-note { font-size: 8pt; color: #666; margin-top: 4pt; line-height: 1.6; }
+        /* ===== BANK ===== */
+        .bank-box {
+          background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4pt;
+          padding: ${compactMode ? '8pt 12pt' : '10pt 14pt'};
+          margin-bottom: ${compactMode ? '6pt' : '8pt'};
+        }
+        .bank-box .lbl { font-size: ${compactMode ? '6.5pt' : '7pt'}; color: #888; text-transform: uppercase; letter-spacing: 0.8pt; margin-bottom: 3pt; font-weight: 600; }
+        .bank-box .detail { font-size: ${compactMode ? '8.5pt' : '9pt'}; font-weight: 600; }
+        .bank-box .note { font-size: ${compactMode ? '7pt' : '7.5pt'}; color: #666; margin-top: 3pt; line-height: 1.5; }
 
-        /* Signature */
-        .signature-area { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 28pt; padding-top: 10pt; }
-        .signature-left img { max-height: 50pt; }
-        .signature-right { text-align: center; }
-        .signature-right .greeting { font-size: 9pt; color: #555; }
-        .signature-right .line { border-bottom: 1px solid #1a1a1a; width: 180pt; margin: 4pt auto 4pt; }
-        .signature-right .sign-name { font-weight: 700; font-size: 10pt; }
-        .signature-right .sign-title { font-size: 8pt; color: #666; }
+        /* ===== SIGNATURE ===== */
+        .signature { display: flex; justify-content: space-between; align-items: flex-end; margin-top: ${compactMode ? '14pt' : '22pt'}; padding-top: 6pt; }
+        .sig-left img { max-height: 40pt; }
+        .sig-right { text-align: center; }
+        .sig-right .greet { font-size: ${compactMode ? '8pt' : '8.5pt'}; color: #555; }
+        .sig-right .line { border-bottom: 1px solid #1a1a1a; width: 160pt; margin: 3pt auto 3pt; }
+        .sig-right .name { font-weight: 700; font-size: ${compactMode ? '9pt' : '9.5pt'}; }
+        .sig-right .title { font-size: ${compactMode ? '7pt' : '7.5pt'}; color: #666; }
 
-        /* Tax Invoice Image - Auto Merge */
-        .tax-invoice-section { margin-top: 16pt; padding-top: 14pt; border-top: 2px dashed #059669; page-break-before: auto; }
-        .tax-invoice-section .section-title { text-align: center; font-size: 9pt; font-weight: 700; color: #059669; margin-bottom: 8pt; text-transform: uppercase; letter-spacing: 2pt; }
-        .tax-invoice-section .section-sub { text-align: center; font-size: 8.5pt; color: #666; margin-bottom: 10pt; }
-        .tax-invoice-section img { width: 100%; height: auto; border: 1px solid #e5e7eb; border-radius: 4pt; }
+        /* ===== TAX INVOICE SECTION ===== */
+        .tax-section {
+          margin-top: 10pt; padding-top: 10pt;
+          border-top: 2px dashed #1a1a1a;
+        }
+        .tax-section .sec-title { text-align: center; font-size: 8pt; font-weight: 700; color: #555; margin-bottom: 6pt; text-transform: uppercase; letter-spacing: 1.5pt; }
+        .tax-section .sec-sub { text-align: center; font-size: ${compactMode ? '7.5pt' : '8pt'}; color: #666; margin-bottom: 6pt; }
+        .tax-section img { width: 100%; height: auto; border: 1px solid #e5e7eb; border-radius: 3pt; }
 
-        /* Footer */
-        .footer { text-align: center; margin-top: 20pt; padding-top: 10pt; border-top: 1px solid #e5e7eb; font-size: 7.5pt; color: #aaa; letter-spacing: 0.3pt; }
+        /* ===== FOOTER ===== */
+        .footer { text-align: center; margin-top: 12pt; padding-top: 6pt; border-top: 1px solid #e5e7eb; font-size: 6.5pt; color: #aaa; letter-spacing: 0.2pt; }
 
-        /* Notes */
-        .notes { font-size: 9pt; color: #555; margin-bottom: 14pt; padding-left: 4pt; }
+        /* ===== NOTES ===== */
+        .notes { font-size: ${compactMode ? '8pt' : '8.5pt'}; color: #555; margin-bottom: ${compactMode ? '8pt' : '12pt'}; padding-left: 2pt; }
 
         @media print { body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
       </style>
@@ -195,20 +236,20 @@ function generatePrintHTML(invoice: Invoice, settings: CompanySettings | null) {
           ${settings?.logo ? `<img src="${settings.logo}" alt="Logo" />` : ''}
           <div>
             <div class="company-name">${companyName}</div>
-            <div class="company-desc">Pest Control &bull; Rodent Control &bull; Termite Control</div>
+            <div class="company-tagline">Pest Control &bull; Rodent Control &bull; Termite Control</div>
             <div class="company-info">
               ${settings?.address || 'Jln Bandulan, Kec Sukun, Kota Malang, Jawa Timur'}<br/>
-              ${settings?.phone ? `Telp: ${settings.phone}` : ''}${settings?.email ? ` | ${settings.email}` : ''}<br/>
+              ${settings?.phone ? `Telp: ${settings.phone}` : ''}${settings?.email ? ` | Email: ${settings.email}` : ''}<br/>
               ${settings?.npwp ? `NPWP: ${settings.npwp}` : ''}
             </div>
           </div>
         </div>
         <div class="header-right">
-          <div class="invoice-label">INVOICE</div>
+          <div class="invoice-title">INVOICE</div>
           <div class="invoice-meta">
             No: <strong>${invoice.invoiceNumber}</strong><br/>
             Tanggal: ${formatDate(invoice.issueDate)}<br/>
-            Jatuh Tempo: <span class="due-date">${formatDate(invoice.dueDate)}</span>
+            Jatuh Tempo: <span class="due">${formatDate(invoice.dueDate)}</span>
           </div>
         </div>
       </div>
@@ -218,11 +259,11 @@ function generatePrintHTML(invoice: Invoice, settings: CompanySettings | null) {
 
       <!-- CUSTOMER -->
       <div class="customer-box">
-        <div class="label">Kepada Yth.</div>
-        <div class="name">${invoice.customer.companyName}</div>
-        <div class="detail">
+        <div class="customer-label">Kepada Yth.</div>
+        <div class="customer-name">${invoice.customer.companyName}</div>
+        <div class="customer-detail">
           PIC: ${invoice.customer.pic}<br/>
-          ${invoice.customer.address ? `${invoice.customer.address}<br/>` : ''}
+          ${invoice.customer.address ? `Alamat: ${invoice.customer.address}<br/>` : ''}
           ${invoice.customer.npwp ? `NPWP: ${invoice.customer.npwp}` : ''}
         </div>
       </div>
@@ -231,21 +272,19 @@ function generatePrintHTML(invoice: Invoice, settings: CompanySettings | null) {
       <table class="items">
         <thead>
           <tr>
-            <th style="width:30pt">No</th>
+            <th class="c" style="width:28pt">No</th>
             <th>Deskripsi</th>
-            <th class="center" style="width:40pt">Qty</th>
-            <th class="right" style="width:110pt">Harga Jual</th>
-            <th class="right" style="width:110pt">Total</th>
+            <th class="r" style="width:120pt">Harga Jual</th>
+            <th class="r" style="width:120pt">Total</th>
           </tr>
         </thead>
         <tbody>
           ${invoice.items.map((item, idx) => `
             <tr>
-              <td class="center">${idx + 1}</td>
+              <td class="c">${idx + 1}</td>
               <td>${item.description}</td>
-              <td class="center">${item.qty}</td>
-              <td class="right">Rp ${formatCurrency(item.unitPrice)}</td>
-              <td class="right">Rp ${formatCurrency(item.total)}</td>
+              <td class="r">Rp ${formatCurrency(item.unitPrice)}</td>
+              <td class="r">Rp ${formatCurrency(item.total)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -254,7 +293,7 @@ function generatePrintHTML(invoice: Invoice, settings: CompanySettings | null) {
       <!-- TOTALS -->
       <div class="totals">
         <div class="totals-box">
-          <div class="totals-row"><span>Subtotal</span><span>Rp ${formatCurrency(invoice.subtotal)}</span></div>
+          <div class="totals-row"><span>Jumlah</span><span>Rp ${formatCurrency(invoice.subtotal)}</span></div>
           ${ppn > 0 ? `
             <div class="totals-row"><span>DPP (dibulatkan)</span><span>Rp ${formatCurrency(dpp)}</span></div>
             <div class="totals-row"><span>PPN 12%</span><span>Rp ${formatCurrency(ppn)}</span></div>
@@ -262,14 +301,14 @@ function generatePrintHTML(invoice: Invoice, settings: CompanySettings | null) {
           ${invoice.discount > 0 ? `
             <div class="totals-row"><span>Diskon</span><span>- Rp ${formatCurrency(invoice.discount)}</span></div>
           ` : ''}
-          <div class="totals-row grand"><span>Total</span><span class="amount">Rp ${formatCurrency(grandTotal)}</span></div>
+          <div class="totals-row grand"><span>Jumlah Dibayar</span><span class="val">Rp ${formatCurrency(grandTotal)}</span></div>
         </div>
       </div>
 
       <!-- TERBILANG -->
       <div class="terbilang">
-        <div class="label">Terbilang</div>
-        <div class="value">${terbilang(grandTotal)}</div>
+        <div class="lbl">Terbilang</div>
+        <div class="val">${terbilang(grandTotal)}</div>
       </div>
 
       <!-- NOTES -->
@@ -278,39 +317,38 @@ function generatePrintHTML(invoice: Invoice, settings: CompanySettings | null) {
       <!-- BANK INFO -->
       ${settings?.bankName ? `
         <div class="bank-box">
-          <div class="label">Pembayaran Melalui Transfer</div>
-          <div class="bank-detail">${settings.bankName} &mdash; No. Rek: ${settings.bankAccount} a.n. <strong>${settings.bankHolder}</strong></div>
-          <div class="bank-note">Pembayaran mohon dikonfirmasi melalui nomor WA ${settings.phone || ''} disertai bukti SS transfer. Terima kasih.</div>
+          <div class="lbl">Pembayaran Bisa Ditransfer Melalui</div>
+          <div class="detail">${settings.bankName}: ${settings.bankAccount} atas nama ${settings.bankHolder}</div>
+          ${settings?.phone ? `<div class="note">(Pembayaran mohon dikonfirmasi melalui nomor WA ${settings.phone} disertai bukti SS transfer, terima kasih)</div>` : ''}
         </div>
       ` : ''}
 
       <!-- SIGNATURE -->
-      <div class="signature-area">
-        <div class="signature-left">
+      <div class="signature">
+        <div class="sig-left">
           ${settings?.logo ? `<img src="${settings.logo}" alt="Logo" />` : ''}
         </div>
-        <div class="signature-right">
-          <div class="greeting">Hormat Kami,</div>
-          <div style="height: 60pt"></div>
+        <div class="sig-right">
+          <div class="greet">Hormat Kami,</div>
+          <div style="height: ${compactMode ? '45pt' : '55pt'}"></div>
           <div class="line"></div>
-          <div class="sign-name">${settings?.bankHolder || 'Sulianto'}</div>
-          <div class="sign-title">Direktur</div>
+          <div class="name">${settings?.bankHolder || 'Sulianto'}</div>
+          <div class="title">Direktur</div>
         </div>
       </div>
 
-      <!-- TAX INVOICE IMAGE - AUTO MERGE -->
+      <!-- TAX INVOICE IMAGE (auto-merged) -->
       ${invoice.taxInvoiceImage ? `
-        <div class="tax-invoice-section">
-          <div class="section-title">Faktur Pajak</div>
-          ${invoice.taxInvoiceNumber ? `<div class="section-sub">No: ${invoice.taxInvoiceNumber}</div>` : ''}
+        <div class="tax-section">
+          <div class="sec-title">Lampiran Faktur Pajak</div>
+          ${invoice.taxInvoiceNumber ? `<div class="sec-sub">No: ${invoice.taxInvoiceNumber}</div>` : ''}
           <img src="${invoice.taxInvoiceImage}" alt="Faktur Pajak" />
         </div>
       ` : ''}
 
       <!-- FOOTER -->
       <div class="footer">
-        Dokumen ini sah dan dibuat secara elektronik oleh sistem akuntansi ${companyName}.<br/>
-        Terima kasih atas kepercayaan Anda.
+        Dokumen ini dibuat secara elektronik oleh ${companyName}
       </div>
     </body>
     </html>
