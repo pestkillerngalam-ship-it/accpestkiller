@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { hitungPajak } from '@/lib/invoice-utils';
+import { hitungPajak, getDefaultDescription } from '@/lib/invoice-utils';
 
 interface Customer { id: string; companyName: string; }
 
@@ -36,11 +36,15 @@ interface FormState {
   discount: number;
   notes: string;
   items: InvoiceItemRow[];
+  taxInvoiceNumber: string;
+  taxInvoiceDate: string;
+  taxInvoiceStatus: string;
+  taxInvoiceImage: string;
 }
 
 const emptyItem = (): InvoiceItemRow => ({
   id: crypto.randomUUID(),
-  description: '',
+  description: getDefaultDescription(),
   qty: 1,
   unitPrice: 0,
   total: 0,
@@ -49,12 +53,16 @@ const emptyItem = (): InvoiceItemRow => ({
 const emptyForm: FormState = {
   customerId: '',
   issueDate: new Date().toISOString().split('T')[0],
-  dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+  dueDate: (() => { const d = new Date(); d.setDate(d.getDate() + 10); return d.toISOString().split('T')[0]; })(),
   status: 'draft',
   taxType: 'none',
   discount: 0,
   notes: '',
   items: [emptyItem()],
+  taxInvoiceNumber: '',
+  taxInvoiceDate: '',
+  taxInvoiceStatus: 'not_created',
+  taxInvoiceImage: '',
 };
 
 interface Props {
@@ -105,11 +113,36 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                 total: i.total,
               }))
             : [emptyItem()],
+          taxInvoiceNumber: data.taxInvoiceNumber || '',
+          taxInvoiceDate: data.taxInvoiceDate?.split('T')[0] || '',
+          taxInvoiceStatus: data.taxInvoiceStatus || 'not_created',
+          taxInvoiceImage: data.taxInvoiceImage || '',
         });
+        setFakturFile(data.taxInvoiceImage || '');
       }
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const [fakturFile, setFakturFile] = useState<string>('');
+
+  const handleFakturUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      toast.error('Hanya file PDF yang diterima');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result) {
+        setForm(prev => ({ ...prev, taxInvoiceImage: reader.result as string }));
+        setFakturFile(reader.result as string);
+        toast.success('Faktur pajak berhasil diupload');
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const updateItem = (idx: number, field: keyof InvoiceItemRow, value: string | number) => {
@@ -163,6 +196,8 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
           taxAmount,
           total,
           invoiceNumber: editId ? undefined : '', // server generates
+          taxInvoiceDate: form.taxInvoiceDate || null,
+          taxInvoiceStatus: form.taxInvoiceNumber ? 'created' : 'not_created',
         }),
       });
       if (!res.ok) throw new Error();
@@ -200,7 +235,14 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             </div>
             <div className="space-y-2">
               <Label>Tanggal Invoice</Label>
-              <Input type="date" value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} />
+              <Input type="date" value={form.issueDate} onChange={(e) => {
+                const newIssueDate = e.target.value;
+                // Auto due date = issue date + 10 days
+                const due = new Date(newIssueDate);
+                due.setDate(due.getDate() + 10);
+                const newDueDate = due.toISOString().split('T')[0];
+                setForm({ ...form, issueDate: newIssueDate, dueDate: newDueDate });
+              }} />
             </div>
             <div className="space-y-2">
               <Label>Jatuh Tempo</Label>
@@ -345,6 +387,37 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               rows={2}
             />
+          </div>
+
+          {/* Faktur Pajak Section */}
+          <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+            <h4 className="font-semibold text-sm">Faktur Pajak</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Nomor Faktur Pajak</Label>
+                <Input
+                  value={form.taxInvoiceNumber}
+                  onChange={(e) => setForm({ ...form, taxInvoiceNumber: e.target.value })}
+                  placeholder="Masukkan nomor faktur pajak"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Tanggal Faktur Pajak</Label>
+                <Input
+                  type="date"
+                  value={form.taxInvoiceDate}
+                  onChange={(e) => setForm({ ...form, taxInvoiceDate: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Upload Faktur Pajak (PDF dari Coretax)</Label>
+              <Input type="file" accept=".pdf,application/pdf" onChange={handleFakturUpload} />
+              <p className="text-xs text-muted-foreground">Download faktur pajak dari Coretax dalam format PDF</p>
+              {form.taxInvoiceImage && (
+                <p className="text-xs text-emerald-600 font-medium">✓ Faktur PDF berhasil diupload</p>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

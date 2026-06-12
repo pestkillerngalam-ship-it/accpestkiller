@@ -37,6 +37,7 @@ import {
   Eye,
   Download,
   X,
+  Mail,
 } from 'lucide-react';
 import { formatCurrency, formatDate, formatDateShort, hitungPajak } from '@/lib/invoice-utils';
 import { terbilang } from '@/lib/terbilang';
@@ -210,8 +211,7 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
   };
 
   const generatePrintHTML = () => {
-    if (!invoice || !printRef.current) return '';
-    const el = printRef.current;
+    if (!invoice) return '';
     const companyName = settings?.companyName || 'PT Pest Killer Ngalam';
     const logoHTML = settings?.logo ? `<img src="${settings.logo}" alt="Logo" style="max-height:60px;margin-bottom:8px;" />` : '';
     const stampHTML = settings?.stamp ? `<img src="${settings.stamp}" alt="Stempel" style="max-height:80px;margin-bottom:8px;" />` : '';
@@ -411,11 +411,11 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
         .sign-area .stamp-box {
           width: 200px;
           text-align: center;
-          position: relative;
+          padding-bottom: 0;
         }
         .sign-area .stamp-box .stamp-img {
-          max-height: 80px;
-          opacity: 1;
+          max-height: 90px;
+          opacity: 0.9;
         }
         .sign-area .sign-box {
           width: 200px;
@@ -522,8 +522,7 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
         <!-- Signature & Stamp -->
         <div class="sign-area">
           <div class="stamp-box">
-            ${stampHTML ? `<div class="stamp-img">${stampHTML}</div>` : ''}
-            <p style="font-size:9px; color:#9ca3af; margin-top:4px;">Stempel Perusahaan</p>
+            ${stampHTML ? '<div class="stamp-img">' + stampHTML + '</div>' : '<div style="height:90px;"></div>'}
           </div>
           <div class="sign-box">
             <p style="font-size:10px; color:#6b7280;">Hormat kami,</p>
@@ -552,7 +551,7 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
     win.document.close();
     setTimeout(() => {
       win.print();
-    }, 500);
+    }, 1000);
   };
 
   const handleDownloadPDF = () => {
@@ -576,14 +575,45 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       setTimeout(() => {
         document.body.removeChild(iframe);
       }, 2000);
-    }, 500);
+    }, 1000);
   };
 
-  const handleWhatsAppShare = () => {
+  const handleWhatsAppShare = async () => {
     if (!invoice) return;
-    const msg = `Yth. ${invoice.customer.pic},\n\nBerikut invoice kami:\nNo: ${invoice.invoiceNumber}\nTotal: Rp ${formatCurrency(invoice.total)}\nTanggal: ${formatDate(invoice.issueDate)}\n\nTerima kasih.`;
+    const html = generatePrintHTML();
+
+    // Try Web Share API first (can share files to WhatsApp)
+    if (navigator.share && navigator.canShare) {
+      try {
+        const blob = new Blob([html], { type: 'text/html' });
+        const file = new File([blob], invoice.invoiceNumber + '.html', { type: 'text/html' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: 'Invoice ' + invoice.invoiceNumber,
+            text: 'Invoice ' + invoice.invoiceNumber + ' - ' + invoice.customer.companyName,
+            files: [file],
+          });
+          return;
+        }
+      } catch (e) {
+        // User cancelled or share failed, fall through to text
+      }
+    }
+
+    // Fallback: text-based WhatsApp message
+    const msg = 'Yth. ' + invoice.customer.pic + ',\n\nBerikut invoice kami:\nNo: ' + invoice.invoiceNumber + '\nPelanggan: ' + invoice.customer.companyName + '\nTotal: Rp ' + formatCurrency(invoice.total) + '\nTanggal: ' + formatDate(invoice.issueDate) + '\nJatuh Tempo: ' + formatDate(invoice.dueDate) + '\n\nTerima kasih.';
     const phone = invoice.customer.whatsapp.replace(/[^0-9]/g, '');
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+  };
+
+  const handleEmailShare = () => {
+    if (!invoice) return;
+    const subject = encodeURIComponent('Invoice ' + invoice.invoiceNumber + ' - ' + invoice.customer.companyName);
+    const body = encodeURIComponent(
+      'Yth. ' + invoice.customer.pic + ',\n\nBerikut detail invoice kami:\n\nNo. Invoice: ' + invoice.invoiceNumber + '\nPelanggan: ' + invoice.customer.companyName + '\nTanggal: ' + formatDate(invoice.issueDate) + '\nJatuh Tempo: ' + formatDate(invoice.dueDate) + '\nSubtotal: Rp ' + formatCurrency(invoice.subtotal) + '\nTotal: Rp ' + formatCurrency(invoice.total) + '\n\nTerbilang: ' + terbilang(invoice.total) + '\n\n' + (settings?.bankName ? 'Pembayaran:\n' + settings.bankName + '\nNo. Rekening: ' + settings.bankAccount + '\na.n. ' + settings.bankHolder : '') + '\n\nTerima kasih atas kepercayaan Anda.\n\nHormat kami,\n' + (settings?.companyName || 'PT Pest Killer Ngalam')
+    );
+    const email = invoice.customer.email;
+    window.open('mailto:' + email + '?subject=' + subject + '&body=' + body, '_blank');
   };
 
   if (loading || !invoice) {
@@ -770,14 +800,15 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
 
                   {/* Stamp & Signature */}
                   <div className="flex justify-between items-end mt-8">
-                    <div className="text-center">
-                      {settings?.stamp && <img src={settings.stamp} alt="Stempel" className="h-20 mb-1" />}
-                      <p className="text-xs text-muted-foreground">Stempel Perusahaan</p>
+                    <div className="text-center w-[200px]">
+                      {settings?.stamp && <img src={settings.stamp} alt="Stempel" className="h-[90px] mb-1 opacity-90" />}
                     </div>
-                    <div className="text-center">
+                    <div className="text-center w-[200px]">
                       <p className="text-sm text-muted-foreground">Hormat kami,</p>
-                      <div className="mt-12">
-                        <p className="font-medium">{settings?.companyName || 'PT Pest Killer Ngalam'}</p>
+                      <div className="mt-[60px]">
+                        <div className="border-t border-foreground pt-2">
+                          <p className="font-medium">{settings?.companyName || 'PT Pest Killer Ngalam'}</p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -861,6 +892,13 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
                   <div className="text-left">
                     <p className="font-medium">Kirim via WhatsApp</p>
                     <p className="text-xs">Kirim ke pelanggan</p>
+                  </div>
+                </Button>
+                <Button onClick={handleEmailShare} className="h-20 bg-blue-600 hover:bg-blue-700 text-white">
+                  <Mail className="w-8 h-8 mr-3" />
+                  <div className="text-left">
+                    <p className="font-medium">Kirim via Email</p>
+                    <p className="text-xs text-blue-100">Buka email client</p>
                   </div>
                 </Button>
               </div>

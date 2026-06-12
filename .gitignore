@@ -1,2 +1,3 @@
 tool-results/
-tool-results/
+.next/
+node_modules/
