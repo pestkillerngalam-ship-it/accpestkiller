@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
         issueDate: new Date(invoiceData.issueDate),
         dueDate: new Date(invoiceData.dueDate),
         taxInvoiceDate: invoiceData.taxInvoiceDate ? new Date(invoiceData.taxInvoiceDate) : null,
+        taxInvoiceStatus: invoiceData.taxInvoiceStatus || (invoiceData.taxInvoiceNumber ? 'created' : 'not_created'),
         items: {
           create: items.map((item: { description: string; qty: number; unitPrice: number; total: number }) => ({
             description: item.description,

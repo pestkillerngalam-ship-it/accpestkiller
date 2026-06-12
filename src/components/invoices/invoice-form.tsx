@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Upload, X, FileCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDefaultDueDate, getDefaultDescription, roundToNearestThousand, formatCurrency } from '@/lib/invoice-utils';
 
@@ -36,6 +36,10 @@ interface FormState {
   discount: number;
   notes: string;
   items: InvoiceItemRow[];
+  // Faktur Pajak fields
+  taxInvoiceNumber: string;
+  taxInvoiceDate: string;
+  taxInvoiceImage: string;
 }
 
 const emptyItem = (): InvoiceItemRow => ({
@@ -52,11 +56,14 @@ const getEmptyForm = (): FormState => {
     customerId: '',
     issueDate: today,
     dueDate: getDefaultDueDate(today),
-    status: 'draft',
-    taxType: 'none',
+    status: 'unpaid',
+    taxType: 'ppn12',
     discount: 0,
     notes: '',
     items: [emptyItem()],
+    taxInvoiceNumber: '',
+    taxInvoiceDate: today,
+    taxInvoiceImage: '',
   };
 };
 
@@ -108,6 +115,9 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                 total: i.total,
               }))
             : [emptyItem()],
+          taxInvoiceNumber: data.taxInvoiceNumber || '',
+          taxInvoiceDate: data.taxInvoiceDate?.split('T')[0] || '',
+          taxInvoiceImage: data.taxInvoiceImage || '',
         });
       }
     } catch (err) {
@@ -140,22 +150,48 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
     setForm((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }));
   };
 
-  // PPN Inclusive (DPP) calculation
+  // PPN Inclusive (DPP) calculation with pembulatan ke atas
   // User enters FINAL price (already includes PPN)
   const subtotal = form.items.reduce((s, i) => s + i.total, 0);
-  const taxRate = form.taxType === 'ppn12' ? 0.12 : form.taxType === 'dpp_other' ? 0.11 : 0;
-  const dpp = form.taxType !== 'none' ? subtotal / (1 + taxRate) : subtotal;
-  const taxAmount = form.taxType !== 'none' ? dpp * taxRate : 0;
-  const totalBeforeDiscount = dpp + taxAmount;
-  const total = totalBeforeDiscount - form.discount;
+  const taxRate = form.taxType === 'ppn12' ? 0.12 : 0;
+  let dpp = 0;
+  let taxAmount = 0;
+  let total = 0;
+
+  if (form.taxType !== 'none' && subtotal > 0) {
+    // DPP inclusive: DPP = Total / 1.12, then round up to nearest thousand
+    dpp = roundToNearestThousand(subtotal / (1 + taxRate));
+    taxAmount = Math.round(dpp * taxRate);
+    total = dpp + taxAmount - form.discount;
+  } else {
+    dpp = subtotal;
+    total = subtotal - form.discount;
+  }
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Limit to 2MB
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Ukuran gambar maks 2MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result) {
+        setForm((prev) => ({ ...prev, taxInvoiceImage: reader.result as string }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async () => {
     if (!form.customerId) {
       toast.error('Pilih pelanggan terlebih dahulu');
       return;
     }
-    if (form.items.some((i) => !i.description)) {
-      toast.error('Isi deskripsi semua item');
+    if (form.items.some((i) => !i.description || i.unitPrice <= 0)) {
+      toast.error('Isi deskripsi dan harga semua item');
       return;
     }
     setLoading(true);
@@ -169,11 +205,23 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...form,
+          customerId: form.customerId,
+          issueDate: form.issueDate,
+          dueDate: form.dueDate,
+          status: form.status,
+          taxType: form.taxType,
+          discount: form.discount,
+          notes: form.notes,
+          items: form.items,
           subtotal,
           taxAmount,
           total,
           invoiceNumber: editId ? undefined : '',
+          // Faktur Pajak fields
+          taxInvoiceNumber: form.taxInvoiceNumber,
+          taxInvoiceDate: form.taxInvoiceDate || null,
+          taxInvoiceImage: form.taxInvoiceImage,
+          taxInvoiceStatus: form.taxInvoiceNumber ? 'created' : 'not_created',
         }),
       });
       if (!res.ok) throw new Error();
@@ -194,7 +242,8 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
         <DialogHeader>
           <DialogTitle>{editId ? 'Edit Invoice' : 'Buat Invoice Baru'}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-5">
+          {/* === INFO INVOICE === */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2 sm:col-span-2">
               <Label>Pelanggan</Label>
@@ -237,14 +286,10 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                   <SelectItem value="ppn12">PPN 12% (Inclusive / DPP)</SelectItem>
                 </SelectContent>
               </Select>
-              {form.taxType !== 'none' && (
-                <p className="text-xs text-amber-600">
-                  Harga yang diinput sudah termasuk PPN. DPP &amp; PPN dihitung otomatis.
-                </p>
-              )}
             </div>
           </div>
 
+          {/* === ITEM INVOICE === */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <Label className="font-semibold">Item</Label>
@@ -303,6 +348,7 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             </div>
           </div>
 
+          {/* === TOTALS === */}
           <div className="border rounded-lg p-4 space-y-2 bg-muted/30">
             <div className="flex justify-between text-sm">
               <span>Subtotal</span>
@@ -311,15 +357,15 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             {form.taxType !== 'none' && (
               <>
                 <div className="flex justify-between text-sm">
-                  <span>DPP ({form.taxType === 'ppn12' ? 'PPN 12%' : 'Lainnya'})</span>
-                  <span>Rp {fmt(Math.round(dpp))}</span>
+                  <span>DPP (dibulatkan ke atas)</span>
+                  <span>Rp {fmt(dpp)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>PPN ({form.taxType === 'ppn12' ? '12%' : '11%'})</span>
-                  <span>Rp {fmt(Math.round(taxAmount))}</span>
+                  <span>PPN 12%</span>
+                  <span>Rp {fmt(taxAmount)}</span>
                 </div>
                 <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded p-2">
-                  * Harga sudah termasuk PPN. DPP = Rp {fmt(subtotal)} / 1,{form.taxType === 'ppn12' ? '12' : '11'} = Rp {fmt(Math.round(dpp))}
+                  * Harga sudah termasuk PPN. DPP = Rp {fmt(subtotal)} / 1,12 = Rp {fmt(subtotal / 1.12)} &rarr; dibulatkan = Rp {fmt(dpp)}
                 </div>
               </>
             )}
@@ -331,10 +377,63 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             )}
             <div className="flex justify-between font-bold text-base border-t pt-2">
               <span>Total</span>
-              <span className="text-emerald-600">Rp {fmt(Math.round(total))}</span>
+              <span className="text-emerald-600">Rp {fmt(total)}</span>
             </div>
           </div>
 
+          {/* === FAKTUR PAJAK (Integrated) === */}
+          <div className="border rounded-lg p-4 space-y-4 bg-amber-50/50 dark:bg-amber-950/20">
+            <div className="flex items-center gap-2">
+              <FileCheck className="w-4 h-4 text-amber-600" />
+              <Label className="font-semibold text-amber-700 dark:text-amber-400">Faktur Pajak</Label>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-sm">Nomor Faktur Pajak</Label>
+                <Input
+                  value={form.taxInvoiceNumber}
+                  onChange={(e) => setForm({ ...form, taxInvoiceNumber: e.target.value })}
+                  placeholder="Masukkan nomor faktur pajak"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm">Tanggal Faktur Pajak</Label>
+                <Input
+                  type="date"
+                  value={form.taxInvoiceDate}
+                  onChange={(e) => setForm({ ...form, taxInvoiceDate: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm">Upload Gambar Faktur Pajak</Label>
+              <p className="text-xs text-muted-foreground">Gambar akan otomatis digabungkan ke dalam PDF invoice saat dicetak</p>
+              {form.taxInvoiceImage ? (
+                <div className="relative inline-block">
+                  <img src={form.taxInvoiceImage} alt="Faktur Pajak" className="max-h-40 rounded-lg border" />
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="absolute -top-2 -right-2 h-6 w-6"
+                    onClick={() => setForm({ ...form, taxInvoiceImage: '' })}
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              ) : (
+                <label className="flex items-center justify-center w-full h-24 border-2 border-dashed rounded-lg cursor-pointer hover:border-amber-400 hover:bg-amber-50/50 transition-colors">
+                  <div className="text-center">
+                    <Upload className="w-6 h-6 mx-auto text-muted-foreground mb-1" />
+                    <p className="text-xs text-muted-foreground">Klik atau drag untuk upload</p>
+                    <p className="text-xs text-muted-foreground">JPG, PNG (maks 2MB)</p>
+                  </div>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                </label>
+              )}
+            </div>
+          </div>
+
+          {/* === CATATAN === */}
           <div className="space-y-2">
             <Label>Diskon (Rp)</Label>
             <Input
@@ -353,6 +452,7 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             />
           </div>
 
+          {/* === SUBMIT === */}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
             <Button

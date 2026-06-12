@@ -99,7 +99,12 @@ const statusConfig: Record<string, { label: string; className: string }> = {
 };
 
 function generatePrintHTML(invoice: Invoice, settings: CompanySettings | null) {
-  const taxLabel = invoice.taxType === 'ppn12' ? 'PPN 12%' : invoice.taxType === 'dpp_other' ? 'DPP Nilai Lain' : '';
+  const companyName = settings?.companyName || 'PT Pest Killer Ngalam';
+  const taxRate = invoice.taxType === 'ppn12' ? 0.12 : 0;
+  const dppRaw = taxRate > 0 && invoice.subtotal > 0 ? invoice.subtotal / (1 + taxRate) : invoice.subtotal;
+  const dpp = Math.ceil(dppRaw / 1000) * 1000;
+  const ppn = Math.round(dpp * taxRate);
+  const grandTotal = dpp + ppn - (invoice.discount || 0);
 
   return `
     <!DOCTYPE html>
@@ -107,81 +112,92 @@ function generatePrintHTML(invoice: Invoice, settings: CompanySettings | null) {
     <head>
       <title>Invoice ${invoice.invoiceNumber}</title>
       <style>
-        @page { size: A4; margin: 15mm; }
+        @page { size: A4; margin: 12mm 15mm; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, Helvetica, sans-serif; color: #333; font-size: 11pt; line-height: 1.5; }
+        body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 10.5pt; line-height: 1.5; }
 
         /* Header */
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24pt; padding-bottom: 16pt; border-bottom: 3px solid #059669; }
-        .header-left { display: flex; align-items: center; gap: 12pt; }
-        .header-left img { max-height: 50pt; max-width: 80pt; object-fit: contain; }
-        .header-left .company-name { font-size: 14pt; font-weight: bold; color: #059669; }
-        .header-left .company-info { font-size: 8.5pt; color: #666; line-height: 1.6; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20pt; padding-bottom: 14pt; border-bottom: 3px solid #059669; }
+        .header-left { display: flex; align-items: flex-start; gap: 12pt; }
+        .header-left img { max-height: 55pt; max-width: 70pt; object-fit: contain; margin-top: 2pt; }
+        .header-left .company-name { font-size: 15pt; font-weight: 800; color: #059669; letter-spacing: 0.5pt; }
+        .header-left .company-desc { font-size: 8pt; color: #666; margin-top: 2pt; letter-spacing: 1pt; text-transform: uppercase; }
+        .header-left .company-info { font-size: 8pt; color: #555; line-height: 1.7; margin-top: 4pt; }
         .header-right { text-align: right; }
-        .header-right .invoice-label { font-size: 18pt; font-weight: bold; color: #059669; letter-spacing: 2pt; }
-        .header-right .invoice-meta { font-size: 9pt; color: #666; margin-top: 4pt; }
+        .header-right .invoice-label { font-size: 22pt; font-weight: 800; color: #059669; letter-spacing: 3pt; }
+        .header-right .invoice-meta { font-size: 9pt; color: #444; margin-top: 6pt; line-height: 1.8; }
+        .header-right .invoice-meta .due-date { color: #dc2626; font-weight: 700; }
 
-        /* Customer */
-        .customer-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6pt; padding: 12pt; margin-bottom: 16pt; }
-        .customer-box .label { font-size: 8pt; color: #888; text-transform: uppercase; letter-spacing: 1pt; margin-bottom: 4pt; }
-        .customer-box .name { font-weight: bold; font-size: 11pt; }
+        /* Tax Invoice Number Badge */
+        .tax-badge { display: inline-block; background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; padding: 3pt 12pt; border-radius: 4pt; font-size: 8.5pt; font-weight: 700; margin-bottom: 14pt; letter-spacing: 0.3pt; }
 
-        /* Tax Invoice Number */
-        .tax-badge { display: inline-block; background: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 3pt 10pt; border-radius: 4pt; font-size: 9pt; font-weight: 600; margin-bottom: 12pt; }
+        /* Customer Box */
+        .customer-box { background: #f0fdf4; border-left: 4px solid #059669; border-radius: 0 6pt 6pt 0; padding: 12pt 16pt; margin-bottom: 14pt; }
+        .customer-box .label { font-size: 7.5pt; color: #888; text-transform: uppercase; letter-spacing: 1.5pt; margin-bottom: 3pt; font-weight: 600; }
+        .customer-box .name { font-weight: 700; font-size: 11pt; }
+        .customer-box .detail { font-size: 9pt; color: #555; line-height: 1.7; margin-top: 2pt; }
 
-        /* Table */
-        table { width: 100%; border-collapse: collapse; margin-bottom: 16pt; }
-        th { background: #059669; color: white; padding: 8pt 10pt; text-align: left; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5pt; }
-        th.right, td.right { text-align: right; }
-        th.center, td.center { text-align: center; }
-        td { padding: 7pt 10pt; border-bottom: 1px solid #e5e7eb; font-size: 10pt; }
-        tr:nth-child(even) td { background: #f9fafb; }
-        tr:last-child td { border-bottom: none; }
+        /* Items Table */
+        table.items { width: 100%; border-collapse: collapse; margin-bottom: 18pt; }
+        table.items thead th { background: #059669; color: white; padding: 8pt 10pt; text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.5pt; font-weight: 600; }
+        table.items th.right, table.items td.right { text-align: right; }
+        table.items th.center, table.items td.center { text-align: center; }
+        table.items td { padding: 8pt 10pt; border-bottom: 1px solid #e5e7eb; font-size: 10pt; }
+        table.items tbody tr:nth-child(even) td { background: #f9fafb; }
+        table.items tbody tr:last-child td { border-bottom: 2px solid #059669; }
 
         /* Totals */
-        .totals { display: flex; justify-content: flex-end; margin-bottom: 16pt; }
-        .totals-box { width: 220pt; }
-        .totals-row { display: flex; justify-content: space-between; padding: 4pt 0; font-size: 10pt; }
-        .totals-row.grand { border-top: 2px solid #333; padding-top: 8pt; margin-top: 4pt; font-weight: bold; font-size: 12pt; }
+        .totals { display: flex; justify-content: flex-end; margin-bottom: 14pt; }
+        .totals-box { width: 260pt; }
+        .totals-row { display: flex; justify-content: space-between; padding: 3.5pt 0; font-size: 10pt; color: #444; }
+        .totals-row.grand { border-top: 2px solid #1a1a1a; padding-top: 8pt; margin-top: 4pt; font-weight: 800; font-size: 13pt; color: #1a1a1a; }
         .totals-row.grand .amount { color: #059669; }
 
         /* Terbilang */
-        .terbilang { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6pt; padding: 10pt; text-align: center; margin-bottom: 16pt; }
-        .terbilang .label { font-size: 8pt; color: #888; }
-        .terbilang .value { font-size: 10pt; font-weight: 600; color: #059669; }
+        .terbilang { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6pt; padding: 10pt 16pt; margin-bottom: 14pt; }
+        .terbilang .label { font-size: 7.5pt; color: #888; text-transform: uppercase; letter-spacing: 1pt; }
+        .terbilang .value { font-size: 10pt; font-weight: 600; color: #059669; font-style: italic; }
 
-        /* Bank */
-        .bank-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6pt; padding: 10pt; margin-bottom: 20pt; }
-        .bank-box .label { font-size: 8pt; color: #888; text-transform: uppercase; letter-spacing: 1pt; margin-bottom: 4pt; }
+        /* Bank Info */
+        .bank-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6pt; padding: 12pt 16pt; margin-bottom: 6pt; }
+        .bank-box .label { font-size: 7.5pt; color: #888; text-transform: uppercase; letter-spacing: 1pt; margin-bottom: 4pt; font-weight: 600; }
+        .bank-box .bank-detail { font-size: 10pt; font-weight: 600; }
+        .bank-box .bank-note { font-size: 8pt; color: #666; margin-top: 4pt; line-height: 1.6; }
 
         /* Signature */
-        .signature { text-align: right; margin-top: 30pt; }
-        .signature .stamp { max-height: 60pt; margin-bottom: 4pt; }
-        .signature .line { border-bottom: 1px solid #333; width: 180pt; margin-left: auto; margin-bottom: 4pt; }
-        .signature .company { font-weight: bold; font-size: 10pt; }
+        .signature-area { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 28pt; padding-top: 10pt; }
+        .signature-left img { max-height: 50pt; }
+        .signature-right { text-align: center; }
+        .signature-right .greeting { font-size: 9pt; color: #555; }
+        .signature-right .line { border-bottom: 1px solid #1a1a1a; width: 180pt; margin: 4pt auto 4pt; }
+        .signature-right .sign-name { font-weight: 700; font-size: 10pt; }
+        .signature-right .sign-title { font-size: 8pt; color: #666; }
 
         /* Tax Invoice Image - Auto Merge */
-        .tax-invoice-section { margin-top: 20pt; padding-top: 16pt; border-top: 2px dashed #059669; }
-        .tax-invoice-section .section-title { text-align: center; font-size: 10pt; font-weight: bold; color: #059669; margin-bottom: 10pt; text-transform: uppercase; letter-spacing: 1pt; }
-        .tax-invoice-section img { max-width: 100%; height: auto; border: 1px solid #e5e7eb; border-radius: 4pt; }
+        .tax-invoice-section { margin-top: 16pt; padding-top: 14pt; border-top: 2px dashed #059669; page-break-before: auto; }
+        .tax-invoice-section .section-title { text-align: center; font-size: 9pt; font-weight: 700; color: #059669; margin-bottom: 8pt; text-transform: uppercase; letter-spacing: 2pt; }
+        .tax-invoice-section .section-sub { text-align: center; font-size: 8.5pt; color: #666; margin-bottom: 10pt; }
+        .tax-invoice-section img { width: 100%; height: auto; border: 1px solid #e5e7eb; border-radius: 4pt; }
 
         /* Footer */
-        .footer { text-align: center; margin-top: 24pt; padding-top: 12pt; border-top: 1px solid #e5e7eb; font-size: 8pt; color: #999; }
+        .footer { text-align: center; margin-top: 20pt; padding-top: 10pt; border-top: 1px solid #e5e7eb; font-size: 7.5pt; color: #aaa; letter-spacing: 0.3pt; }
 
         /* Notes */
-        .notes { font-size: 9pt; color: #666; margin-bottom: 16pt; }
+        .notes { font-size: 9pt; color: #555; margin-bottom: 14pt; padding-left: 4pt; }
 
-        @media print { body { margin: 0; } }
+        @media print { body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
       </style>
     </head>
     <body>
+      <!-- HEADER -->
       <div class="header">
         <div class="header-left">
           ${settings?.logo ? `<img src="${settings.logo}" alt="Logo" />` : ''}
           <div>
-            <div class="company-name">${settings?.companyName || 'PT Pest Killer Ngalam'}</div>
+            <div class="company-name">${companyName}</div>
+            <div class="company-desc">Pest Control &bull; Rodent Control &bull; Termite Control</div>
             <div class="company-info">
-              ${settings?.address ? `${settings.address}<br/>` : ''}
+              ${settings?.address || 'Jln Bandulan, Kec Sukun, Kota Malang, Jawa Timur'}<br/>
               ${settings?.phone ? `Telp: ${settings.phone}` : ''}${settings?.email ? ` | ${settings.email}` : ''}<br/>
               ${settings?.npwp ? `NPWP: ${settings.npwp}` : ''}
             </div>
@@ -192,31 +208,34 @@ function generatePrintHTML(invoice: Invoice, settings: CompanySettings | null) {
           <div class="invoice-meta">
             No: <strong>${invoice.invoiceNumber}</strong><br/>
             Tanggal: ${formatDate(invoice.issueDate)}<br/>
-            Jatuh Tempo: ${formatDate(invoice.dueDate)}
+            Jatuh Tempo: <span class="due-date">${formatDate(invoice.dueDate)}</span>
           </div>
         </div>
       </div>
 
-      ${invoice.taxInvoiceNumber ? `<div class="tax-badge">No. Faktur Pajak: ${invoice.taxInvoiceNumber}</div>` : ''}
+      <!-- TAX INVOICE BADGE -->
+      ${invoice.taxInvoiceNumber ? `<div class="tax-badge">No. Faktur Pajak: ${invoice.taxInvoiceNumber}${invoice.taxInvoiceDate ? ` &mdash; Tanggal: ${formatDateShort(invoice.taxInvoiceDate)}` : ''}</div>` : ''}
 
+      <!-- CUSTOMER -->
       <div class="customer-box">
-        <div class="label">Kepada:</div>
+        <div class="label">Kepada Yth.</div>
         <div class="name">${invoice.customer.companyName}</div>
-        <div style="font-size:9pt;color:#666;line-height:1.6">
+        <div class="detail">
           PIC: ${invoice.customer.pic}<br/>
           ${invoice.customer.address ? `${invoice.customer.address}<br/>` : ''}
           ${invoice.customer.npwp ? `NPWP: ${invoice.customer.npwp}` : ''}
         </div>
       </div>
 
-      <table>
+      <!-- ITEMS TABLE -->
+      <table class="items">
         <thead>
           <tr>
             <th style="width:30pt">No</th>
             <th>Deskripsi</th>
             <th class="center" style="width:40pt">Qty</th>
-            <th class="right" style="width:100pt">Harga Satuan</th>
-            <th class="right" style="width:100pt">Total</th>
+            <th class="right" style="width:110pt">Harga Jual</th>
+            <th class="right" style="width:110pt">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -225,59 +244,72 @@ function generatePrintHTML(invoice: Invoice, settings: CompanySettings | null) {
               <td class="center">${idx + 1}</td>
               <td>${item.description}</td>
               <td class="center">${item.qty}</td>
-              <td class="right">${formatCurrency(item.unitPrice)}</td>
-              <td class="right">${formatCurrency(item.total)}</td>
+              <td class="right">Rp ${formatCurrency(item.unitPrice)}</td>
+              <td class="right">Rp ${formatCurrency(item.total)}</td>
             </tr>
           `).join('')}
         </tbody>
       </table>
 
+      <!-- TOTALS -->
       <div class="totals">
         <div class="totals-box">
-          <div class="totals-row"><span>Subtotal</span><span>${formatCurrency(invoice.subtotal)}</span></div>
-          ${invoice.taxAmount > 0 ? `
-            <div class="totals-row"><span>${taxLabel}</span><span>${formatCurrency(invoice.taxAmount)}</span></div>
+          <div class="totals-row"><span>Subtotal</span><span>Rp ${formatCurrency(invoice.subtotal)}</span></div>
+          ${ppn > 0 ? `
+            <div class="totals-row"><span>DPP (dibulatkan)</span><span>Rp ${formatCurrency(dpp)}</span></div>
+            <div class="totals-row"><span>PPN 12%</span><span>Rp ${formatCurrency(ppn)}</span></div>
           ` : ''}
           ${invoice.discount > 0 ? `
-            <div class="totals-row"><span>Diskon</span><span>- ${formatCurrency(invoice.discount)}</span></div>
+            <div class="totals-row"><span>Diskon</span><span>- Rp ${formatCurrency(invoice.discount)}</span></div>
           ` : ''}
-          <div class="totals-row grand"><span>Total</span><span class="amount">Rp ${formatCurrency(invoice.total)}</span></div>
+          <div class="totals-row grand"><span>Total</span><span class="amount">Rp ${formatCurrency(grandTotal)}</span></div>
         </div>
       </div>
 
+      <!-- TERBILANG -->
       <div class="terbilang">
-        <div class="label">Terbilang:</div>
-        <div class="value">${terbilang(invoice.total)}</div>
+        <div class="label">Terbilang</div>
+        <div class="value">${terbilang(grandTotal)}</div>
       </div>
 
+      <!-- NOTES -->
       ${invoice.notes ? `<div class="notes"><strong>Catatan:</strong> ${invoice.notes}</div>` : ''}
 
+      <!-- BANK INFO -->
       ${settings?.bankName ? `
         <div class="bank-box">
-          <div class="label">Pembayaran ke:</div>
-          <div style="font-size:10pt">
-            <strong>${settings.bankName}</strong> — ${settings.bankAccount} a.n. <strong>${settings.bankHolder}</strong>
-          </div>
+          <div class="label">Pembayaran Melalui Transfer</div>
+          <div class="bank-detail">${settings.bankName} &mdash; No. Rek: ${settings.bankAccount} a.n. <strong>${settings.bankHolder}</strong></div>
+          <div class="bank-note">Pembayaran mohon dikonfirmasi melalui nomor WA ${settings.phone || ''} disertai bukti SS transfer. Terima kasih.</div>
         </div>
       ` : ''}
 
-      <div class="signature">
-        ${settings?.stamp ? `<img class="stamp" src="${settings.stamp}" alt="Stempel" />` : ''}
-        <p style="font-size:9pt">Hormat kami,</p>
-        <div class="line"></div>
-        <div class="company">${settings?.companyName || 'PT Pest Killer Ngalam'}</div>
+      <!-- SIGNATURE -->
+      <div class="signature-area">
+        <div class="signature-left">
+          ${settings?.logo ? `<img src="${settings.logo}" alt="Logo" />` : ''}
+        </div>
+        <div class="signature-right">
+          <div class="greeting">Hormat Kami,</div>
+          <div style="height: 60pt"></div>
+          <div class="line"></div>
+          <div class="sign-name">${settings?.bankHolder || 'Sulianto'}</div>
+          <div class="sign-title">Direktur</div>
+        </div>
       </div>
 
+      <!-- TAX INVOICE IMAGE - AUTO MERGE -->
       ${invoice.taxInvoiceImage ? `
         <div class="tax-invoice-section">
           <div class="section-title">Faktur Pajak</div>
-          ${invoice.taxInvoiceNumber ? `<p style="text-align:center;font-size:9pt;color:#666;margin-bottom:8pt">No: ${invoice.taxInvoiceNumber}</p>` : ''}
+          ${invoice.taxInvoiceNumber ? `<div class="section-sub">No: ${invoice.taxInvoiceNumber}</div>` : ''}
           <img src="${invoice.taxInvoiceImage}" alt="Faktur Pajak" />
         </div>
       ` : ''}
 
+      <!-- FOOTER -->
       <div class="footer">
-        Dokumen ini sah dan dibuat secara elektronik oleh sistem akuntansi ${settings?.companyName || 'PT Pest Killer Ngalam'}.<br/>
+        Dokumen ini sah dan dibuat secara elektronik oleh sistem akuntansi ${companyName}.<br/>
         Terima kasih atas kepercayaan Anda.
       </div>
     </body>
@@ -534,19 +566,29 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
 
                   {/* Totals */}
                   <div className="flex justify-end">
-                    <div className="w-64 space-y-1">
-                      <div className="flex justify-between">
+                    <div className="w-72 space-y-1">
+                      <div className="flex justify-between text-sm">
                         <span>Subtotal</span>
                         <span>{formatCurrency(invoice.subtotal)}</span>
                       </div>
-                      {invoice.taxAmount > 0 && (
-                        <div className="flex justify-between">
-                          <span>Pajak ({invoice.taxType === 'ppn12' ? 'PPN 12%' : ''})</span>
-                          <span>{formatCurrency(invoice.taxAmount)}</span>
-                        </div>
-                      )}
+                      {invoice.taxAmount > 0 && invoice.taxType === 'ppn12' && (() => {
+                        const dppR = Math.ceil((invoice.subtotal / 1.12) / 1000) * 1000;
+                        const ppn = Math.round(dppR * 0.12);
+                        return (
+                          <>
+                            <div className="flex justify-between text-sm">
+                              <span>DPP (dibulatkan)</span>
+                              <span>{formatCurrency(dppR)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span>PPN 12%</span>
+                              <span>{formatCurrency(ppn)}</span>
+                            </div>
+                          </>
+                        );
+                      })()}
                       {invoice.discount > 0 && (
-                        <div className="flex justify-between">
+                        <div className="flex justify-between text-sm">
                           <span>Diskon</span>
                           <span>- {formatCurrency(invoice.discount)}</span>
                         </div>

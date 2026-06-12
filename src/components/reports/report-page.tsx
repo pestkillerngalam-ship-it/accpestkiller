@@ -46,10 +46,13 @@ interface ReportData {
     netProfit: number;
     cashBalance: number;
     initialBalance: number;
+    initialCapital: number;
     totalReceivable: number;
     activeCustomers: number;
     incomeThisMonth: number;
     expenseThisMonth: number;
+    prevIncome: number;
+    prevExpense: number;
   };
   monthlyData: { month: string; income: number; expense: number; profit: number }[];
   expenseByCategory: { category: string; total: number }[];
@@ -380,9 +383,9 @@ export default function ReportPage() {
                   <Button variant="outline" size="sm" onClick={() => {
                     const cashBank = data.kpis.cashBalance;
                     const totalAset = cashBank + data.kpis.totalReceivable;
-                    const initialCapital = data.kpis.initialBalance;
+                    const modalAwal = data.kpis.initialCapital;
                     const labaBerjalan = data.kpis.netProfit;
-                    const selisih = totalAset - (initialCapital + labaBerjalan);
+                    const selisih = totalAset - (modalAwal + labaBerjalan);
                     exportCSV('neraca', [
                       ['Aset', 'Jumlah'],
                       ['Kas & Bank', cashBank.toString()],
@@ -390,9 +393,9 @@ export default function ReportPage() {
                       ['Total Aset', totalAset.toString()],
                       ['', ''],
                       ['Modal', 'Jumlah'],
-                      ['Modal Awal', initialCapital.toString()],
+                      ['Modal Awal', modalAwal.toString()],
                       ['Laba/(Rugi) Berjalan', labaBerjalan.toString()],
-                      ['Total Modal', (initialCapital + labaBerjalan).toString()],
+                      ['Total Modal', (modalAwal + labaBerjalan).toString()],
                       ['', ''],
                       ['Selisih', selisih.toString()],
                     ]);
@@ -406,9 +409,9 @@ export default function ReportPage() {
               {(() => {
                 const cashBank = data.kpis.cashBalance || 0;
                 const totalAset = cashBank + data.kpis.totalReceivable;
-                const initialCapital = data.kpis.initialBalance || 0;
+                const modalAwal = data.kpis.initialCapital || 0;
                 const labaBerjalan = data.kpis.netProfit;
-                const totalModal = initialCapital + labaBerjalan;
+                const totalModal = modalAwal + labaBerjalan;
                 const selisih = totalAset - totalModal;
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -444,7 +447,7 @@ export default function ReportPage() {
                           <TableRow>
                             <TableCell className="text-muted-foreground">Modal Awal</TableCell>
                             <TableCell className="text-right font-medium">
-                              {formatCurrency(initialCapital)}
+                              {formatCurrency(modalAwal)}
                             </TableCell>
                           </TableRow>
                           <TableRow>
@@ -453,25 +456,25 @@ export default function ReportPage() {
                               {formatCurrency(labaBerjalan)}
                             </TableCell>
                           </TableRow>
-                          {selisih !== 0 && (
-                            <TableRow>
-                              <TableCell className="text-muted-foreground">Selisih (Aset - Modal)</TableCell>
-                              <TableCell className={`text-right font-medium ${selisih > 0 ? 'text-amber-600' : 'text-red-600'}`}>
-                                {formatCurrency(selisih)}
-                              </TableCell>
-                            </TableRow>
-                          )}
                           <TableRow className="font-bold bg-emerald-50 dark:bg-emerald-950/30">
                             <TableCell>Total Modal</TableCell>
                             <TableCell className="text-right">
                               {formatCurrency(totalModal)}
                             </TableCell>
                           </TableRow>
+                          {selisih !== 0 && (
+                            <TableRow className="bg-amber-50 dark:bg-amber-950/30">
+                              <TableCell className="text-amber-700 dark:text-amber-400 font-medium">Selisih (Aset - Modal)</TableCell>
+                              <TableCell className={`text-right font-medium ${selisih > 0 ? 'text-amber-600' : 'text-red-600'}`}>
+                                {formatCurrency(selisih)}
+                              </TableCell>
+                            </TableRow>
+                          )}
                         </TableBody>
                       </Table>
                       {selisih !== 0 && (
                         <p className="text-xs text-muted-foreground mt-2">
-                          * Selisih terjadi karena belum semua transaksi tercatat. Pastikan saldo awal dan modal awal sudah diisi di Pengaturan.
+                          * Selisih muncul jika Saldo Awal Kas berbeda dengan Modal Awal. Pastikan kedua nilai sudah diisi dengan benar di Pengaturan.
                         </p>
                       )}
                     </div>

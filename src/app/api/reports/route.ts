@@ -22,9 +22,10 @@ export async function GET(request: NextRequest) {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
 
-    // Fetch settings for initialBalance
+    // Fetch settings for initialBalance & initialCapital
     const settings = await db.companySettings.findFirst();
     const initialBalance = settings?.initialBalance || 0;
+    const initialCapital = settings?.initialCapital || 0;
 
     // All invoices
     const allInvoices = await db.invoice.findMany({ include: { customer: true, items: true } });
@@ -120,8 +121,9 @@ export async function GET(request: NextRequest) {
         totalIncome,
         totalExpense,
         netProfit,
-        cashBalance,       // Fix #1: saldo yang benar
-        initialBalance,    // Fix #1: saldo awal
+        cashBalance,       // Saldo kas saat ini
+        initialBalance,    // Saldo awal kas/bank
+        initialCapital,    // Modal awal perusahaan (neraca)
         totalReceivable,
         activeCustomers,
         invoiceCountThisMonth,
