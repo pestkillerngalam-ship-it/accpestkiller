@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Trash2, Upload, X, FileCheck } from 'lucide-react';
+import { Plus, Trash2, Upload, X, FileCheck, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDefaultDueDate, getDefaultDescription, roundToNearestThousand, formatCurrency } from '@/lib/invoice-utils';
 
@@ -57,7 +57,7 @@ const getEmptyForm = (): FormState => {
     issueDate: today,
     dueDate: getDefaultDueDate(today),
     status: 'unpaid',
-    taxType: 'ppn12',
+    taxType: 'none',
     discount: 0,
     notes: '',
     items: [emptyItem()],
@@ -74,6 +74,71 @@ interface Props {
   customers: Customer[];
   onSave: () => void;
   token: string | null;
+}
+
+// ============================================================
+// PDF to Image converter (using pdf.js from CDN)
+// ============================================================
+async function convertPdfToImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const loadScript = (src: string) => new Promise<void>((res, rej) => {
+      if (document.querySelector(`script[src="${src}"]`)) { res(); return; }
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => res();
+      s.onerror = () => rej(new Error('Failed to load pdf.js'));
+      document.head.appendChild(s);
+    });
+
+    (async () => {
+      try {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+        const pdfjsLib = (window as any).pdfjsLib;
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const page = await pdf.getPage(1);
+        const scale = 2;
+        const viewport = page.getViewport({ scale });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d')!;
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      } catch (err) {
+        reject(err);
+      }
+    })();
+  });
+}
+
+// ============================================================
+// Image auto-process: resize + compress
+// ============================================================
+function processImage(base64: string, maxW = 1400, quality = 0.85): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width;
+      let h = img.height;
+      if (w > maxW) {
+        h = Math.round((maxW / w) * h);
+        w = maxW;
+      }
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(base64);
+    img.src = base64;
+  });
 }
 
 export default function InvoiceForm({ open, onOpenChange, editId, customers, onSave, token }: Props) {
@@ -150,63 +215,73 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
     setForm((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }));
   };
 
-  // PPN Inclusive (DPP) calculation with pembulatan ke atas
-  // User enters FINAL price (already includes PPN)
+  // ============================================================
+  // TAX CALCULATION: 3 modes
+  // ============================================================
   const subtotal = form.items.reduce((s, i) => s + i.total, 0);
-  const taxRate = form.taxType === 'ppn12' ? 0.12 : 0;
+  const taxRate = (form.taxType === 'ppn12' || form.taxType === 'ppn12_exclusive') ? 0.12 : 0;
   let dpp = 0;
   let taxAmount = 0;
   let total = 0;
 
-  if (form.taxType !== 'none' && subtotal > 0) {
-    // DPP inclusive: DPP = Total / 1.12, then round up to nearest thousand
+  if (form.taxType === 'ppn12') {
+    // INCLUSIVE: Harga sudah termasuk PPN
+    // DPP = Subtotal / 1.12, dibulatkan ke atas per 1000
     dpp = roundToNearestThousand(subtotal / (1 + taxRate));
     taxAmount = Math.round(dpp * taxRate);
     total = dpp + taxAmount - form.discount;
+  } else if (form.taxType === 'ppn12_exclusive') {
+    // EXCLUSIVE: Harga belum termasuk PPN (DPP)
+    // PPN ditambahkan di atas DPP
+    dpp = subtotal;
+    taxAmount = Math.round(dpp * taxRate);
+    total = dpp + taxAmount - form.discount;
   } else {
+    // TANPA PAJAK
     dpp = subtotal;
     total = subtotal - form.discount;
   }
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ============================================================
+  // FILE UPLOAD: Image + PDF (auto-convert to image)
+  // ============================================================
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Limit to 5MB (will be compressed after)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Ukuran gambar maks 5MB');
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Ukuran file maks 10MB');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (reader.result) {
-        const base64 = reader.result as string;
-        // Auto-process: resize to max 1400px wide + compress to JPEG 85%
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const maxW = 1400;
-          let w = img.width;
-          let h = img.height;
-          if (w > maxW) {
-            h = Math.round((maxW / w) * h);
-            w = maxW;
-          }
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext('2d')!;
-          ctx.drawImage(img, 0, 0, w, h);
-          const processed = canvas.toDataURL('image/jpeg', 0.85);
-          setForm((prev) => ({ ...prev, taxInvoiceImage: processed }));
-          toast.success('Faktur pajak berhasil di-upload & dioptimasi');
-        };
-        img.onerror = () => {
-          // Fallback to original
-          setForm((prev) => ({ ...prev, taxInvoiceImage: base64 }));
-        };
-        img.src = base64;
+
+    setUploading(true);
+    try {
+      if (file.type === 'application/pdf') {
+        // PDF from Coretax → convert first page to image
+        const imageBase64 = await convertPdfToImage(file);
+        const processed = await processImage(imageBase64);
+        setForm((prev) => ({ ...prev, taxInvoiceImage: processed }));
+        toast.success('Faktur pajak PDF berhasil dikonversi & dioptimasi');
+      } else {
+        // Image file → resize + compress
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        const processed = await processImage(base64);
+        setForm((prev) => ({ ...prev, taxInvoiceImage: processed }));
+        toast.success('Faktur pajak berhasil di-upload & dioptimasi');
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Upload error:', err);
+      toast.error('Gagal memproses file. Coba upload sebagai gambar (JPG/PNG).');
+    } finally {
+      setUploading(false);
+      // Reset input so same file can be re-selected
+      e.target.value = '';
+    }
   };
 
   const handleSubmit = async () => {
@@ -260,6 +335,13 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
 
   const fmt = (n: number) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(n);
 
+  // Tax type label for harga column
+  const hargaLabel = form.taxType === 'ppn12'
+    ? '(sudah termasuk PPN)'
+    : form.taxType === 'ppn12_exclusive'
+      ? '(DPP, belum termasuk PPN)'
+      : '';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -307,11 +389,34 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Tanpa Pajak</SelectItem>
-                  <SelectItem value="ppn12">PPN 12% (Inclusive / DPP)</SelectItem>
+                  <SelectItem value="ppn12">PPN 12% (Inclusive)</SelectItem>
+                  <SelectItem value="ppn12_exclusive">PPN 12% (Exclusive)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
+
+          {/* Tax explanation */}
+          {form.taxType !== 'none' && (
+            <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 space-y-1">
+              {form.taxType === 'ppn12' && (
+                <>
+                  <p className="font-semibold">PPN Inclusive (Harga sudah termasuk PPN)</p>
+                  <p>DPP = Rp {fmt(subtotal)} / 1,12 = Rp {fmt(subtotal / 1.12)} &rarr; dibulatkan = <strong>Rp {fmt(dpp)}</strong></p>
+                  <p>PPN 12% = Rp {fmt(dpp)} x 12% = <strong>Rp {fmt(taxAmount)}</strong></p>
+                  <p>Total = Rp {fmt(dpp)} + Rp {fmt(taxAmount)} = <strong>Rp {fmt(dpp + taxAmount)}</strong></p>
+                </>
+              )}
+              {form.taxType === 'ppn12_exclusive' && (
+                <>
+                  <p className="font-semibold">PPN Exclusive (Harga belum termasuk PPN / DPP)</p>
+                  <p>DPP = <strong>Rp {fmt(dpp)}</strong></p>
+                  <p>PPN 12% = Rp {fmt(dpp)} x 12% = <strong>Rp {fmt(taxAmount)}</strong></p>
+                  <p>Total = Rp {fmt(dpp)} + Rp {fmt(taxAmount)} = <strong>Rp {fmt(dpp + taxAmount)}</strong></p>
+                </>
+              )}
+            </div>
+          )}
 
           {/* === ITEM INVOICE === */}
           <div>
@@ -343,7 +448,7 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                   </div>
                   <div className="col-span-5 sm:col-span-3">
                     {idx === 0 && <p className="text-xs text-muted-foreground mb-1">
-                      Harga {form.taxType !== 'none' ? '(incl. PPN)' : ''}
+                      Harga {hargaLabel}
                     </p>}
                     <Input
                       type="number"
@@ -381,15 +486,12 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             {form.taxType !== 'none' && (
               <>
                 <div className="flex justify-between text-sm">
-                  <span>DPP (dibulatkan ke atas)</span>
+                  <span>DPP</span>
                   <span>Rp {fmt(dpp)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>PPN 12%</span>
                   <span>Rp {fmt(taxAmount)}</span>
-                </div>
-                <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded p-2">
-                  * Harga sudah termasuk PPN. DPP = Rp {fmt(subtotal)} / 1,12 = Rp {fmt(subtotal / 1.12)} &rarr; dibulatkan = Rp {fmt(dpp)}
                 </div>
               </>
             )}
@@ -430,8 +532,10 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
               </div>
             </div>
             <div className="space-y-2">
-              <Label className="text-sm">Upload Gambar Faktur Pajak</Label>
-              <p className="text-xs text-muted-foreground">Gambar akan otomatis digabungkan ke dalam PDF invoice saat dicetak</p>
+              <Label className="text-sm">Upload Faktur Pajak</Label>
+              <p className="text-xs text-muted-foreground">
+                Upload file PDF dari Coretax atau gambar. PDF akan otomatis dikonversi ke gambar untuk invoice.
+              </p>
               {form.taxInvoiceImage ? (
                 <div className="relative inline-block">
                   <img src={form.taxInvoiceImage} alt="Faktur Pajak" className="max-h-40 rounded-lg border" />
@@ -445,13 +549,22 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                   </Button>
                 </div>
               ) : (
-                <label className="flex items-center justify-center w-full h-24 border-2 border-dashed rounded-lg cursor-pointer hover:border-amber-400 hover:bg-amber-50/50 transition-colors">
+                <label className={`flex items-center justify-center w-full h-24 border-2 border-dashed rounded-lg cursor-pointer hover:border-amber-400 hover:bg-amber-50/50 transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
                   <div className="text-center">
-                    <Upload className="w-6 h-6 mx-auto text-muted-foreground mb-1" />
-                    <p className="text-xs text-muted-foreground">Klik atau drag untuk upload</p>
-                    <p className="text-xs text-muted-foreground">JPG, PNG (maks 2MB)</p>
+                    {uploading ? (
+                      <>
+                        <FileText className="w-6 h-6 mx-auto text-amber-500 mb-1 animate-pulse" />
+                        <p className="text-xs text-amber-600">Mengkonversi PDF...</p>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-6 h-6 mx-auto text-muted-foreground mb-1" />
+                        <p className="text-xs text-muted-foreground">Klik atau drag untuk upload</p>
+                        <p className="text-xs text-muted-foreground">PDF, JPG, PNG (maks 10MB)</p>
+                      </>
+                    )}
                   </div>
-                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                  <input type="file" accept=".pdf,image/*" className="hidden" onChange={handleFileUpload} disabled={uploading} />
                 </label>
               )}
             </div>
@@ -482,7 +595,7 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             <Button
               onClick={handleSubmit}
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={loading}
+              disabled={loading || uploading}
             >
               {loading ? 'Menyimpan...' : 'Simpan'}
             </Button>
