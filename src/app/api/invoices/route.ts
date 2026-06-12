@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     if (search) {
       where.OR = [
         { invoiceNumber: { contains: search } },
-        { customer: { companyName: { contains: search } },
+        { customer: { companyName: { contains: search } } },
       ];
     }
     const invoices = await db.invoice.findMany({
