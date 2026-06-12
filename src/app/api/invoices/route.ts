@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
+import { getNextInvoiceNumber } from '@/lib/invoice-utils';
 
 async function authenticate(request: NextRequest) {
   const token = request.headers.get('Authorization')?.replace('Bearer ', '');
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
     if (search) {
       where.OR = [
         { invoiceNumber: { contains: search } },
-        { customer: { companyName: { contains: search } } },
+        { customer: { companyName: { contains: search } },
       ];
     }
     const invoices = await db.invoice.findMany({
@@ -43,9 +44,15 @@ export async function POST(request: NextRequest) {
     if (!decoded) return NextResponse.json({ error: 'Tidak terautentikasi' }, { status: 401 });
     const body = await request.json();
     const { items, ...invoiceData } = body;
+
+    // Generate invoice number: INV/PESTKILLER/MM/YYYY/0001
+    const allInvoices = await db.invoice.findMany({ select: { invoiceNumber: true } });
+    const invoiceNumber = await getNextInvoiceNumber(allInvoices.map(i => i.invoiceNumber));
+
     const invoice = await db.invoice.create({
       data: {
         ...invoiceData,
+        invoiceNumber,
         issueDate: new Date(invoiceData.issueDate),
         dueDate: new Date(invoiceData.dueDate),
         taxInvoiceDate: invoiceData.taxInvoiceDate ? new Date(invoiceData.taxInvoiceDate) : null,

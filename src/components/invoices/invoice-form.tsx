@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getDefaultDueDate, getDefaultDescription, roundToNearestThousand, formatCurrency } from '@/lib/invoice-utils';
 
 interface Customer { id: string; companyName: string; }
 
@@ -39,21 +40,24 @@ interface FormState {
 
 const emptyItem = (): InvoiceItemRow => ({
   id: crypto.randomUUID(),
-  description: '',
+  description: getDefaultDescription(),
   qty: 1,
   unitPrice: 0,
   total: 0,
 });
 
-const emptyForm: FormState = {
-  customerId: '',
-  issueDate: new Date().toISOString().split('T')[0],
-  dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-  status: 'draft',
-  taxType: 'none',
-  discount: 0,
-  notes: '',
-  items: [emptyItem()],
+const getEmptyForm = (): FormState => {
+  const today = new Date().toISOString().split('T')[0];
+  return {
+    customerId: '',
+    issueDate: today,
+    dueDate: getDefaultDueDate(today),
+    status: 'draft',
+    taxType: 'none',
+    discount: 0,
+    notes: '',
+    items: [emptyItem()],
+  };
 };
 
 interface Props {
@@ -66,7 +70,7 @@ interface Props {
 }
 
 export default function InvoiceForm({ open, onOpenChange, editId, customers, onSave, token }: Props) {
-  const [form, setForm] = useState<FormState>(emptyForm);
+  const [form, setForm] = useState<FormState>(getEmptyForm);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -74,7 +78,7 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
       if (editId) {
         fetchInvoice();
       } else {
-        setForm(emptyForm);
+        setForm(getEmptyForm());
       }
     }
   }, [open, editId]);
@@ -111,6 +115,10 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
     }
   };
 
+  const handleIssueDateChange = (newDate: string) => {
+    setForm({ ...form, issueDate: newDate, dueDate: getDefaultDueDate(newDate) });
+  };
+
   const updateItem = (idx: number, field: keyof InvoiceItemRow, value: string | number) => {
     setForm((prev) => {
       const items = [...prev.items];
@@ -132,11 +140,14 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
     setForm((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }));
   };
 
+  // PPN Inclusive (DPP) calculation
+  // User enters FINAL price (already includes PPN)
   const subtotal = form.items.reduce((s, i) => s + i.total, 0);
   const taxRate = form.taxType === 'ppn12' ? 0.12 : form.taxType === 'dpp_other' ? 0.11 : 0;
   const dpp = form.taxType !== 'none' ? subtotal / (1 + taxRate) : subtotal;
   const taxAmount = form.taxType !== 'none' ? dpp * taxRate : 0;
-  const total = dpp + taxAmount - form.discount;
+  const totalBeforeDiscount = dpp + taxAmount;
+  const total = totalBeforeDiscount - form.discount;
 
   const handleSubmit = async () => {
     if (!form.customerId) {
@@ -162,7 +173,7 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
           subtotal,
           taxAmount,
           total,
-          invoiceNumber: editId ? undefined : '', // server generates
+          invoiceNumber: editId ? undefined : '',
         }),
       });
       if (!res.ok) throw new Error();
@@ -200,10 +211,10 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             </div>
             <div className="space-y-2">
               <Label>Tanggal Invoice</Label>
-              <Input type="date" value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} />
+              <Input type="date" value={form.issueDate} onChange={(e) => handleIssueDateChange(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Jatuh Tempo</Label>
+              <Label>Jatuh Tempo <span className="text-xs text-muted-foreground">(otomatis +10 hari)</span></Label>
               <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
             </div>
             <div className="space-y-2">
@@ -223,9 +234,14 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Tanpa Pajak</SelectItem>
-                  <SelectItem value="ppn12">PPN 12% (DPP)</SelectItem>
+                  <SelectItem value="ppn12">PPN 12% (Inclusive / DPP)</SelectItem>
                 </SelectContent>
               </Select>
+              {form.taxType !== 'none' && (
+                <p className="text-xs text-amber-600">
+                  Harga yang diinput sudah termasuk PPN. DPP &amp; PPN dihitung otomatis.
+                </p>
+              )}
             </div>
           </div>
 
@@ -242,7 +258,7 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                   <div className="col-span-12 sm:col-span-5">
                     {idx === 0 && <p className="text-xs text-muted-foreground mb-1">Deskripsi</p>}
                     <Input
-                      placeholder="Deskripsi layanan"
+                      placeholder="Jasa Pest Control Bulan ..."
                       value={item.description}
                       onChange={(e) => updateItem(idx, 'description', e.target.value)}
                     />
@@ -257,7 +273,9 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                     />
                   </div>
                   <div className="col-span-5 sm:col-span-3">
-                    {idx === 0 && <p className="text-xs text-muted-foreground mb-1">Harga Satuan</p>}
+                    {idx === 0 && <p className="text-xs text-muted-foreground mb-1">
+                      Harga {form.taxType !== 'none' ? '(incl. PPN)' : ''}
+                    </p>}
                     <Input
                       type="number"
                       value={item.unitPrice || ''}
@@ -294,11 +312,14 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
               <>
                 <div className="flex justify-between text-sm">
                   <span>DPP ({form.taxType === 'ppn12' ? 'PPN 12%' : 'Lainnya'})</span>
-                  <span>Rp {fmt(dpp)}</span>
+                  <span>Rp {fmt(Math.round(dpp))}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>Pajak</span>
-                  <span>Rp {fmt(taxAmount)}</span>
+                  <span>PPN ({form.taxType === 'ppn12' ? '12%' : '11%'})</span>
+                  <span>Rp {fmt(Math.round(taxAmount))}</span>
+                </div>
+                <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded p-2">
+                  * Harga sudah termasuk PPN. DPP = Rp {fmt(subtotal)} / 1,{form.taxType === 'ppn12' ? '12' : '11'} = Rp {fmt(Math.round(dpp))}
                 </div>
               </>
             )}
@@ -310,7 +331,7 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
             )}
             <div className="flex justify-between font-bold text-base border-t pt-2">
               <span>Total</span>
-              <span className="text-emerald-600">Rp {fmt(total)}</span>
+              <span className="text-emerald-600">Rp {fmt(Math.round(total))}</span>
             </div>
           </div>
 

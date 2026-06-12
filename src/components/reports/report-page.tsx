@@ -44,6 +44,8 @@ interface ReportData {
     totalIncome: number;
     totalExpense: number;
     netProfit: number;
+    cashBalance: number;
+    initialBalance: number;
     totalReceivable: number;
     activeCustomers: number;
     incomeThisMonth: number;
@@ -60,6 +62,7 @@ const categoryLabels: Record<string, string> = {
   bbm: 'BBM',
   pestisida: 'Pestisida',
   gaji: 'Gaji',
+  pajak: 'Pajak',
   lainnya: 'Lainnya',
 };
 
@@ -375,17 +378,23 @@ export default function ReportPage() {
                     <Printer className="w-4 h-4 mr-1" /> Cetak
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => {
-                    const cashBank = data.kpis.totalIncome - data.kpis.totalExpense;
+                    const cashBank = data.kpis.cashBalance;
+                    const totalAset = cashBank + data.kpis.totalReceivable;
+                    const initialCapital = data.kpis.initialBalance;
+                    const labaBerjalan = data.kpis.netProfit;
+                    const selisih = totalAset - (initialCapital + labaBerjalan);
                     exportCSV('neraca', [
                       ['Aset', 'Jumlah'],
                       ['Kas & Bank', cashBank.toString()],
-                      ['Piutang', data.kpis.totalReceivable.toString()],
-                      ['Total Aset', (cashBank + data.kpis.totalReceivable).toString()],
+                      ['Piutang Usaha', data.kpis.totalReceivable.toString()],
+                      ['Total Aset', totalAset.toString()],
                       ['', ''],
                       ['Modal', 'Jumlah'],
-                      ['Modal Awal', '100.000.000'],
-                      ['Laba Ditahan', data.kpis.netProfit.toString()],
-                      ['Total Modal', (100000000 + data.kpis.netProfit).toString()],
+                      ['Modal Awal', initialCapital.toString()],
+                      ['Laba/(Rugi) Berjalan', labaBerjalan.toString()],
+                      ['Total Modal', (initialCapital + labaBerjalan).toString()],
+                      ['', ''],
+                      ['Selisih', selisih.toString()],
                     ]);
                   }}>
                     <Download className="w-4 h-4 mr-1" /> CSV
@@ -394,56 +403,81 @@ export default function ReportPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="font-bold text-base mb-3 text-emerald-700 border-b pb-2">ASET</h3>
-                  <Table>
-                    <TableBody>
-                      <TableRow>
-                        <TableCell className="text-muted-foreground">Kas & Bank</TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatCurrency(data.kpis.totalIncome - data.kpis.totalExpense)}
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="text-muted-foreground">Piutang Usaha</TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatCurrency(data.kpis.totalReceivable)}
-                        </TableCell>
-                      </TableRow>
-                      <TableRow className="font-bold bg-muted/50">
-                        <TableCell>Total Aset</TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency((data.kpis.totalIncome - data.kpis.totalExpense) + data.kpis.totalReceivable)}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-                <div>
-                  <h3 className="font-bold text-base mb-3 text-emerald-700 border-b pb-2">MODAL</h3>
-                  <Table>
-                    <TableBody>
-                      <TableRow>
-                        <TableCell className="text-muted-foreground">Modal Awal</TableCell>
-                        <TableCell className="text-right font-medium">Rp 100.000.000</TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="text-muted-foreground">Laba/(Rugi) Berjalan</TableCell>
-                        <TableCell className={`text-right font-medium ${data.kpis.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                          {formatCurrency(data.kpis.netProfit)}
-                        </TableCell>
-                      </TableRow>
-                      <TableRow className="font-bold bg-muted/50">
-                        <TableCell>Total Modal</TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(100000000 + data.kpis.netProfit)}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
+              {(() => {
+                const cashBank = data.kpis.cashBalance || 0;
+                const totalAset = cashBank + data.kpis.totalReceivable;
+                const initialCapital = data.kpis.initialBalance || 0;
+                const labaBerjalan = data.kpis.netProfit;
+                const totalModal = initialCapital + labaBerjalan;
+                const selisih = totalAset - totalModal;
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h3 className="font-bold text-base mb-3 text-emerald-700 border-b pb-2">ASET</h3>
+                      <Table>
+                        <TableBody>
+                          <TableRow>
+                            <TableCell className="text-muted-foreground">Kas & Bank</TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(cashBank)}
+                            </TableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell className="text-muted-foreground">Piutang Usaha</TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(data.kpis.totalReceivable)}
+                            </TableCell>
+                          </TableRow>
+                          <TableRow className="font-bold bg-emerald-50 dark:bg-emerald-950/30">
+                            <TableCell>Total Aset</TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(totalAset)}
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-base mb-3 text-emerald-700 border-b pb-2">MODAL</h3>
+                      <Table>
+                        <TableBody>
+                          <TableRow>
+                            <TableCell className="text-muted-foreground">Modal Awal</TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(initialCapital)}
+                            </TableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell className="text-muted-foreground">Laba/(Rugi) Berjalan</TableCell>
+                            <TableCell className={`text-right font-medium ${labaBerjalan >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {formatCurrency(labaBerjalan)}
+                            </TableCell>
+                          </TableRow>
+                          {selisih !== 0 && (
+                            <TableRow>
+                              <TableCell className="text-muted-foreground">Selisih (Aset - Modal)</TableCell>
+                              <TableCell className={`text-right font-medium ${selisih > 0 ? 'text-amber-600' : 'text-red-600'}`}>
+                                {formatCurrency(selisih)}
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          <TableRow className="font-bold bg-emerald-50 dark:bg-emerald-950/30">
+                            <TableCell>Total Modal</TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(totalModal)}
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                      {selisih !== 0 && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          * Selisih terjadi karena belum semua transaksi tercatat. Pastikan saldo awal dan modal awal sudah diisi di Pengaturan.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

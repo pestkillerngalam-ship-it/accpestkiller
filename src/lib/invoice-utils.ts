@@ -4,23 +4,25 @@ export function roundToNearestThousand(amount: number): number {
 
 export function generateInvoiceNumber(): string {
   const now = new Date();
+  const month = (now.getMonth() + 1).toString().padStart(2, '0');
   const year = now.getFullYear();
-  return `INV/PESTKILLER/${year}/0001`;
+  return `INV/PESTKILLER/${month}/${year}/0001`;
 }
 
 export async function getNextInvoiceNumber(existingNumbers: string[]): Promise<string> {
   const now = new Date();
+  const month = (now.getMonth() + 1).toString().padStart(2, '0');
   const year = now.getFullYear();
-  const prefix = `INV/PESTKILLER/${year}/`;
-  const existingInYear = existingNumbers
+  const prefix = `INV/PESTKILLER/${month}/${year}/`;
+  const existingInPeriod = existingNumbers
     .filter((n) => n.startsWith(prefix))
     .map((n) => {
       const parts = n.split('/');
-      return parseInt(parts[3], 10);
+      return parseInt(parts[4], 10);
     })
     .filter((n) => !isNaN(n));
 
-  const nextNum = existingInYear.length > 0 ? Math.max(...existingInYear) + 1 : 1;
+  const nextNum = existingInPeriod.length > 0 ? Math.max(...existingInPeriod) + 1 : 1;
   return `${prefix}${nextNum.toString().padStart(4, '0')}`;
 }
 
@@ -45,4 +47,19 @@ export function formatDateShort(date: string | Date): string {
     month: '2-digit',
     year: 'numeric',
   }).format(new Date(date));
+}
+
+// Default due date: 10 days from invoice date
+export function getDefaultDueDate(issueDate: string): string {
+  const d = new Date(issueDate);
+  d.setDate(d.getDate() + 10);
+  return d.toISOString().split('T')[0];
+}
+
+// Auto description for pest control
+export function getDefaultDescription(): string {
+  const now = new Date();
+  const bulan = now.toLocaleDateString('id-ID', { month: 'long' });
+  const tahun = now.getFullYear();
+  return `Jasa Pest Control Bulan ${bulan} ${tahun}`;
 }
