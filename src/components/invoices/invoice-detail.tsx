@@ -409,15 +409,16 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       + '</tr></table>'
 
       // ===== 5. FOOTER: GABUNGAN TTD + STEMPEL — 1 kolom kanan =====
-      + '<div style="text-align:right;padding-right:20px;position:relative;">'
+      + '<div style="text-align:right;padding-right:20px;">'
       + '<div style="font-size:8pt;color:#666;">' + signDate + '</div>'
       + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:1px;">' + companyName + '</div>'
-      + '<div style="height:70px;"></div>'
+      // Stempel — dalam alur normal, tepat di atas garis TTD
+      + (stampImgURL
+        ? '<div style="height:85px;text-align:right;margin-top:2px;"><img src="' + stampImgURL + '" style="height:85px;width:auto;opacity:0.85;" /></div>'
+        : '<div style="height:85px;"></div>')
       + '<div style="border-bottom:1px solid #333;width:200px;display:inline-block;"></div>'
       + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:3px;">' + directorName + '</div>'
       + '<div style="font-size:8pt;color:#666;">Direktur</div>'
-      // Stempel — overlay di area tanda tangan, pinggir kanan
-      + (stampImgURL ? '<img src="' + stampImgURL + '" style="position:absolute;bottom:30px;right:10px;height:85px;width:auto;opacity:0.8;" />' : '')
       + '</div>'
 
       // ===== 6. CUSTOM FOOTER (pengganti browser footer) =====
