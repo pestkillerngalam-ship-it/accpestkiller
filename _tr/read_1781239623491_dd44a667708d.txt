@@ -1,0 +1,798 @@
+     1→'use client';
+     2→
+     3→import { useEffect, useState } from 'react';
+     4→import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Badge } from '@/components/ui/badge';
+     7→import { Input } from '@/components/ui/input';
+     8→import { Textarea } from '@/components/ui/textarea';
+     9→import { Label } from '@/components/ui/label';
+    10→import {
+    11→  Select,
+    12→  SelectContent,
+    13→  SelectItem,
+    14→  SelectTrigger,
+    15→  SelectValue,
+    16→} from '@/components/ui/select';
+    17→import {
+    18→  Table,
+    19→  TableBody,
+    20→  TableCell,
+    21→  TableHead,
+    22→  TableHeader,
+    23→  TableRow,
+    24→} from '@/components/ui/table';
+    25→import {
+    26→  Tabs,
+    27→  TabsContent,
+    28→  TabsList,
+    29→  TabsTrigger,
+    30→} from '@/components/ui/tabs';
+    31→import {
+    32→  Printer,
+    33→  Share2,
+    34→  MessageSquare,
+    35→  FileCheck,
+    36→  Upload,
+    37→  FileDown,
+    38→  Eye,
+    39→  X,
+    40→} from 'lucide-react';
+    41→import { formatCurrency, formatDate, formatDateShort } from '@/lib/invoice-utils';
+    42→import { terbilang } from '@/lib/terbilang';
+    43→import { toast } from 'sonner';
+    44→
+    45→interface InvoiceItem {
+    46→  id: string;
+    47→  description: string;
+    48→  qty: number;
+    49→  unitPrice: number;
+    50→  total: number;
+    51→}
+    52→
+    53→interface Invoice {
+    54→  id: string;
+    55→  invoiceNumber: string;
+    56→  customer: { companyName: string; pic: string; address: string; npwp: string; whatsapp: string; email: string };
+    57→  issueDate: string;
+    58→  dueDate: string;
+    59→  status: string;
+    60→  subtotal: number;
+    61→  taxType: string;
+    62→  taxAmount: number;
+    63→  discount: number;
+    64→  total: number;
+    65→  notes: string;
+    66→  taxInvoiceNumber: string;
+    67→  taxInvoiceDate: string | null;
+    68→  taxInvoiceStatus: string;
+    69→  taxInvoiceImage: string;
+    70→  items: InvoiceItem[];
+    71→}
+    72→
+    73→interface CompanySettings {
+    74→  companyName: string;
+    75→  address: string;
+    76→  phone: string;
+    77→  email: string;
+    78→  website: string;
+    79→  npwp: string;
+    80→  logo: string;
+    81→  stamp: string;
+    82→  bankName: string;
+    83→  bankAccount: string;
+    84→  bankHolder: string;
+    85→}
+    86→
+    87→interface Props {
+    88→  open: boolean;
+    89→  onOpenChange: (open: boolean) => void;
+    90→  invoiceId: string | null;
+    91→  onRefresh: () => void;
+    92→  token: string | null;
+    93→}
+    94→
+    95→const statusConfig: Record<string, { label: string; className: string }> = {
+    96→  draft: { label: 'Draft', className: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
+    97→  unpaid: { label: 'Belum Lunas', className: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' },
+    98→  paid: { label: 'Lunas', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' },
+    99→};
+   100→
+   101→function generatePrintHTML(invoice: Invoice, settings: CompanySettings | null) {
+   102→  const companyName = settings?.companyName || 'PT Pest Killer Ngalam';
+   103→  const taxRate = invoice.taxType === 'ppn12' ? 0.12 : 0;
+   104→  const dppRaw = taxRate > 0 && invoice.subtotal > 0 ? invoice.subtotal / (1 + taxRate) : invoice.subtotal;
+   105→  const dpp = Math.ceil(dppRaw / 1000) * 1000;
+   106→  const ppn = Math.round(dpp * taxRate);
+   107→  const grandTotal = dpp + ppn - (invoice.discount || 0);
+   108→
+   109→  // Check if tax invoice image is provided — if so, use compact layout for 1-page feel
+   110→  const hasTaxImage = !!invoice.taxInvoiceImage;
+   111→  const compactMode = hasTaxImage;
+   112→
+   113→  return `
+   114→    <!DOCTYPE html>
+   115→    <html>
+   116→    <head>
+   117→      <title>Invoice ${invoice.invoiceNumber}</title>
+   118→      <style>
+   119→        @page { size: A4; margin: 10mm 14mm 10mm 14mm; }
+   120→        * { margin: 0; padding: 0; box-sizing: border-box; }
+   121→        body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: ${compactMode ? '9.5pt' : '10pt'}; line-height: 1.45; }
+   122→
+   123→        /* ===== HEADER ===== */
+   124→        .header {
+   125→          display: flex; justify-content: space-between; align-items: flex-start;
+   126→          margin-bottom: ${compactMode ? '10pt' : '16pt'};
+   127→          padding-bottom: ${compactMode ? '8pt' : '12pt'};
+   128→          border-bottom: 2.5px solid #1a1a1a;
+   129→        }
+   130→        .header-left { display: flex; align-items: flex-start; gap: 10pt; }
+   131→        .header-left img { max-height: ${compactMode ? '42pt' : '50pt'}; max-width: 60pt; object-fit: contain; }
+   132→        .company-name { font-size: ${compactMode ? '13pt' : '14pt'}; font-weight: 800; color: #1a1a1a; letter-spacing: 0.3pt; }
+   133→        .company-tagline { font-size: ${compactMode ? '7pt' : '7.5pt'}; color: #666; margin-top: 1pt; letter-spacing: 0.8pt; text-transform: uppercase; font-weight: 600; }
+   134→        .company-info { font-size: ${compactMode ? '7.5pt' : '8pt'}; color: #555; line-height: 1.6; margin-top: 3pt; }
+   135→        .header-right { text-align: right; min-width: 160pt; }
+   136→        .invoice-title { font-size: ${compactMode ? '20pt' : '22pt'}; font-weight: 800; color: #059669; letter-spacing: 2pt; }
+   137→        .invoice-meta { font-size: ${compactMode ? '8pt' : '8.5pt'}; color: #333; margin-top: 4pt; line-height: 1.8; }
+   138→        .invoice-meta .due { color: #dc2626; font-weight: 700; }
+   139→
+   140→        /* ===== TAX BADGE ===== */
+   141→        .tax-badge {
+   142→          display: inline-block; background: #fffbeb; border: 1px solid #fcd34d;
+   143→          color: #92400e; padding: 2pt 10pt; border-radius: 3pt;
+   144→          font-size: ${compactMode ? '7.5pt' : '8pt'}; font-weight: 700;
+   145→          margin-bottom: ${compactMode ? '8pt' : '12pt'}; letter-spacing: 0.2pt;
+   146→        }
+   147→
+   148→        /* ===== CUSTOMER ===== */
+   149→        .customer-box {
+   150→          background: #f9fafb; border-left: 3px solid #059669;
+   151→          border-radius: 0 4pt 4pt 0;
+   152→          padding: ${compactMode ? '8pt 12pt' : '10pt 14pt'};
+   153→          margin-bottom: ${compactMode ? '8pt' : '12pt'};
+   154→        }
+   155→        .customer-label { font-size: ${compactMode ? '6.5pt' : '7pt'}; color: #888; text-transform: uppercase; letter-spacing: 1.5pt; margin-bottom: 2pt; font-weight: 600; }
+   156→        .customer-name { font-weight: 700; font-size: ${compactMode ? '10pt' : '10.5pt'}; }
+   157→        .customer-detail { font-size: ${compactMode ? '8pt' : '8.5pt'}; color: #555; line-height: 1.6; margin-top: 1pt; }
+   158→
+   159→        /* ===== ITEMS TABLE ===== */
+   160→        table.items { width: 100%; border-collapse: collapse; margin-bottom: ${compactMode ? '10pt' : '14pt'}; }
+   161→        table.items thead th {
+   162→          background: #1a1a1a; color: white;
+   163→          padding: ${compactMode ? '5pt 8pt' : '6pt 8pt'};
+   164→          text-align: left; font-size: ${compactMode ? '7.5pt' : '8pt'};
+   165→          text-transform: uppercase; letter-spacing: 0.4pt; font-weight: 600;
+   166→        }
+   167→        .r { text-align: right; }
+   168→        .c { text-align: center; }
+   169→        table.items td {
+   170→          padding: ${compactMode ? '5pt 8pt' : '6pt 8pt'};
+   171→          border-bottom: 1px solid #e5e7eb; font-size: ${compactMode ? '9pt' : '9.5pt'};
+   172→        }
+   173→        table.items tbody tr:nth-child(even) td { background: #fafafa; }
+   174→        table.items tbody tr:last-child td { border-bottom: 2px solid #1a1a1a; }
+   175→
+   176→        /* ===== TOTALS ===== */
+   177→        .totals { display: flex; justify-content: flex-end; margin-bottom: ${compactMode ? '8pt' : '12pt'}; }
+   178→        .totals-box { width: 240pt; }
+   179→        .totals-row { display: flex; justify-content: space-between; padding: 2.5pt 0; font-size: ${compactMode ? '9pt' : '9.5pt'}; color: #444; }
+   180→        .totals-row.grand {
+   181→          border-top: 2px solid #1a1a1a; padding-top: 6pt; margin-top: 3pt;
+   182→          font-weight: 800; font-size: ${compactMode ? '11pt' : '12pt'}; color: #1a1a1a;
+   183→        }
+   184→        .totals-row.grand .val { color: #059669; }
+   185→
+   186→        /* ===== TERBILANG ===== */
+   187→        .terbilang {
+   188→          background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4pt;
+   189→          padding: ${compactMode ? '6pt 12pt' : '8pt 14pt'};
+   190→          margin-bottom: ${compactMode ? '8pt' : '12pt'};
+   191→        }
+   192→        .terbilang .lbl { font-size: ${compactMode ? '6.5pt' : '7pt'}; color: #888; text-transform: uppercase; letter-spacing: 0.8pt; }
+   193→        .terbilang .val { font-size: ${compactMode ? '8.5pt' : '9pt'}; font-weight: 600; color: #333; font-style: italic; }
+   194→
+   195→        /* ===== BANK ===== */
+   196→        .bank-box {
+   197→          background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4pt;
+   198→          padding: ${compactMode ? '8pt 12pt' : '10pt 14pt'};
+   199→          margin-bottom: ${compactMode ? '6pt' : '8pt'};
+   200→        }
+   201→        .bank-box .lbl { font-size: ${compactMode ? '6.5pt' : '7pt'}; color: #888; text-transform: uppercase; letter-spacing: 0.8pt; margin-bottom: 3pt; font-weight: 600; }
+   202→        .bank-box .detail { font-size: ${compactMode ? '8.5pt' : '9pt'}; font-weight: 600; }
+   203→        .bank-box .note { font-size: ${compactMode ? '7pt' : '7.5pt'}; color: #666; margin-top: 3pt; line-height: 1.5; }
+   204→
+   205→        /* ===== SIGNATURE ===== */
+   206→        .signature { display: flex; justify-content: space-between; align-items: flex-end; margin-top: ${compactMode ? '14pt' : '22pt'}; padding-top: 6pt; }
+   207→        .sig-left img { max-height: 40pt; }
+   208→        .sig-right { text-align: center; }
+   209→        .sig-right .greet { font-size: ${compactMode ? '8pt' : '8.5pt'}; color: #555; }
+   210→        .sig-right .line { border-bottom: 1px solid #1a1a1a; width: 160pt; margin: 3pt auto 3pt; }
+   211→        .sig-right .name { font-weight: 700; font-size: ${compactMode ? '9pt' : '9.5pt'}; }
+   212→        .sig-right .title { font-size: ${compactMode ? '7pt' : '7.5pt'}; color: #666; }
+   213→
+   214→        /* ===== TAX INVOICE SECTION ===== */
+   215→        .tax-section {
+   216→          margin-top: 10pt; padding-top: 10pt;
+   217→          border-top: 2px dashed #1a1a1a;
+   218→        }
+   219→        .tax-section .sec-title { text-align: center; font-size: 8pt; font-weight: 700; color: #555; margin-bottom: 6pt; text-transform: uppercase; letter-spacing: 1.5pt; }
+   220→        .tax-section .sec-sub { text-align: center; font-size: ${compactMode ? '7.5pt' : '8pt'}; color: #666; margin-bottom: 6pt; }
+   221→        .tax-section img { width: 100%; height: auto; border: 1px solid #e5e7eb; border-radius: 3pt; }
+   222→
+   223→        /* ===== FOOTER ===== */
+   224→        .footer { text-align: center; margin-top: 12pt; padding-top: 6pt; border-top: 1px solid #e5e7eb; font-size: 6.5pt; color: #aaa; letter-spacing: 0.2pt; }
+   225→
+   226→        /* ===== NOTES ===== */
+   227→        .notes { font-size: ${compactMode ? '8pt' : '8.5pt'}; color: #555; margin-bottom: ${compactMode ? '8pt' : '12pt'}; padding-left: 2pt; }
+   228→
+   229→        @media print { body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+   230→      </style>
+   231→    </head>
+   232→    <body>
+   233→      <!-- HEADER -->
+   234→      <div class="header">
+   235→        <div class="header-left">
+   236→          ${settings?.logo ? `<img src="${settings.logo}" alt="Logo" />` : ''}
+   237→          <div>
+   238→            <div class="company-name">${companyName}</div>
+   239→            <div class="company-tagline">Pest Control &bull; Rodent Control &bull; Termite Control</div>
+   240→            <div class="company-info">
+   241→              ${settings?.address || 'Jln Bandulan, Kec Sukun, Kota Malang, Jawa Timur'}<br/>
+   242→              ${settings?.phone ? `Telp: ${settings.phone}` : ''}${settings?.email ? ` | Email: ${settings.email}` : ''}<br/>
+   243→              ${settings?.npwp ? `NPWP: ${settings.npwp}` : ''}
+   244→            </div>
+   245→          </div>
+   246→        </div>
+   247→        <div class="header-right">
+   248→          <div class="invoice-title">INVOICE</div>
+   249→          <div class="invoice-meta">
+   250→            No: <strong>${invoice.invoiceNumber}</strong><br/>
+   251→            Tanggal: ${formatDate(invoice.issueDate)}<br/>
+   252→            Jatuh Tempo: <span class="due">${formatDate(invoice.dueDate)}</span>
+   253→          </div>
+   254→        </div>
+   255→      </div>
+   256→
+   257→      <!-- TAX INVOICE BADGE -->
+   258→      ${invoice.taxInvoiceNumber ? `<div class="tax-badge">No. Faktur Pajak: ${invoice.taxInvoiceNumber}${invoice.taxInvoiceDate ? ` &mdash; Tanggal: ${formatDateShort(invoice.taxInvoiceDate)}` : ''}</div>` : ''}
+   259→
+   260→      <!-- CUSTOMER -->
+   261→      <div class="customer-box">
+   262→        <div class="customer-label">Kepada Yth.</div>
+   263→        <div class="customer-name">${invoice.customer.companyName}</div>
+   264→        <div class="customer-detail">
+   265→          PIC: ${invoice.customer.pic}<br/>
+   266→          ${invoice.customer.address ? `Alamat: ${invoice.customer.address}<br/>` : ''}
+   267→          ${invoice.customer.npwp ? `NPWP: ${invoice.customer.npwp}` : ''}
+   268→        </div>
+   269→      </div>
+   270→
+   271→      <!-- ITEMS TABLE -->
+   272→      <table class="items">
+   273→        <thead>
+   274→          <tr>
+   275→            <th class="c" style="width:28pt">No</th>
+   276→            <th>Deskripsi</th>
+   277→            <th class="r" style="width:120pt">Harga Jual</th>
+   278→            <th class="r" style="width:120pt">Total</th>
+   279→          </tr>
+   280→        </thead>
+   281→        <tbody>
+   282→          ${invoice.items.map((item, idx) => `
+   283→            <tr>
+   284→              <td class="c">${idx + 1}</td>
+   285→              <td>${item.description}</td>
+   286→              <td class="r">Rp ${formatCurrency(item.unitPrice)}</td>
+   287→              <td class="r">Rp ${formatCurrency(item.total)}</td>
+   288→            </tr>
+   289→          `).join('')}
+   290→        </tbody>
+   291→      </table>
+   292→
+   293→      <!-- TOTALS -->
+   294→      <div class="totals">
+   295→        <div class="totals-box">
+   296→          <div class="totals-row"><span>Jumlah</span><span>Rp ${formatCurrency(invoice.subtotal)}</span></div>
+   297→          ${ppn > 0 ? `
+   298→            <div class="totals-row"><span>DPP (dibulatkan)</span><span>Rp ${formatCurrency(dpp)}</span></div>
+   299→            <div class="totals-row"><span>PPN 12%</span><span>Rp ${formatCurrency(ppn)}</span></div>
+   300→          ` : ''}
+   301→          ${invoice.discount > 0 ? `
+   302→            <div class="totals-row"><span>Diskon</span><span>- Rp ${formatCurrency(invoice.discount)}</span></div>
+   303→          ` : ''}
+   304→          <div class="totals-row grand"><span>Jumlah Dibayar</span><span class="val">Rp ${formatCurrency(grandTotal)}</span></div>
+   305→        </div>
+   306→      </div>
+   307→
+   308→      <!-- TERBILANG -->
+   309→      <div class="terbilang">
+   310→        <div class="lbl">Terbilang</div>
+   311→        <div class="val">${terbilang(grandTotal)}</div>
+   312→      </div>
+   313→
+   314→      <!-- NOTES -->
+   315→      ${invoice.notes ? `<div class="notes"><strong>Catatan:</strong> ${invoice.notes}</div>` : ''}
+   316→
+   317→      <!-- BANK INFO -->
+   318→      ${settings?.bankName ? `
+   319→        <div class="bank-box">
+   320→          <div class="lbl">Pembayaran Bisa Ditransfer Melalui</div>
+   321→          <div class="detail">${settings.bankName}: ${settings.bankAccount} atas nama ${settings.bankHolder}</div>
+   322→          ${settings?.phone ? `<div class="note">(Pembayaran mohon dikonfirmasi melalui nomor WA ${settings.phone} disertai bukti SS transfer, terima kasih)</div>` : ''}
+   323→        </div>
+   324→      ` : ''}
+   325→
+   326→      <!-- SIGNATURE -->
+   327→      <div class="signature">
+   328→        <div class="sig-left">
+   329→          ${settings?.logo ? `<img src="${settings.logo}" alt="Logo" />` : ''}
+   330→        </div>
+   331→        <div class="sig-right">
+   332→          <div class="greet">Hormat Kami,</div>
+   333→          <div style="height: ${compactMode ? '45pt' : '55pt'}"></div>
+   334→          <div class="line"></div>
+   335→          <div class="name">${settings?.bankHolder || 'Sulianto'}</div>
+   336→          <div class="title">Direktur</div>
+   337→        </div>
+   338→      </div>
+   339→
+   340→      <!-- TAX INVOICE IMAGE (auto-merged) -->
+   341→      ${invoice.taxInvoiceImage ? `
+   342→        <div class="tax-section">
+   343→          <div class="sec-title">Lampiran Faktur Pajak</div>
+   344→          ${invoice.taxInvoiceNumber ? `<div class="sec-sub">No: ${invoice.taxInvoiceNumber}</div>` : ''}
+   345→          <img src="${invoice.taxInvoiceImage}" alt="Faktur Pajak" />
+   346→        </div>
+   347→      ` : ''}
+   348→
+   349→      <!-- FOOTER -->
+   350→      <div class="footer">
+   351→        Dokumen ini dibuat secara elektronik oleh ${companyName}
+   352→      </div>
+   353→    </body>
+   354→    </html>
+   355→  `;
+   356→}
+   357→
+   358→export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh, token }: Props) {
+   359→  const [invoice, setInvoice] = useState<Invoice | null>(null);
+   360→  const [settings, setSettings] = useState<CompanySettings | null>(null);
+   361→  const [loading, setLoading] = useState(false);
+   362→  const [activeTab, setActiveTab] = useState('invoice');
+   363→  const [previewOpen, setPreviewOpen] = useState(false);
+   364→
+   365→  useEffect(() => {
+   366→    if (open && invoiceId) {
+   367→      fetchInvoice();
+   368→      fetchSettings();
+   369→    }
+   370→  }, [open, invoiceId]);
+   371→
+   372→  const fetchInvoice = async () => {
+   373→    if (!invoiceId) return;
+   374→    setLoading(true);
+   375→    try {
+   376→      const res = await fetch(`/api/invoices/${invoiceId}`, {
+   377→        headers: { Authorization: `Bearer ${token}` },
+   378→      });
+   379→      if (res.ok) setInvoice(await res.json());
+   380→    } catch (err) {
+   381→      console.error(err);
+   382→    } finally {
+   383→      setLoading(false);
+   384→    }
+   385→  };
+   386→
+   387→  const fetchSettings = async () => {
+   388→    try {
+   389→      const res = await fetch('/api/settings', {
+   390→        headers: { Authorization: `Bearer ${token}` },
+   391→      });
+   392→      if (res.ok) setSettings(await res.json());
+   393→    } catch (err) {
+   394→      console.error(err);
+   395→    }
+   396→  };
+   397→
+   398→  const updateInvoice = async (data: Partial<Invoice>) => {
+   399→    if (!invoiceId) return;
+   400→    try {
+   401→      const res = await fetch(`/api/invoices/${invoiceId}`, {
+   402→        method: 'PUT',
+   403→        headers: {
+   404→          Authorization: `Bearer ${token}`,
+   405→          'Content-Type': 'application/json',
+   406→        },
+   407→        body: JSON.stringify(data),
+   408→      });
+   409→      if (res.ok) {
+   410→        toast.success('Invoice berhasil diperbarui');
+   411→        fetchInvoice();
+   412→        onRefresh();
+   413→      }
+   414→    } catch {
+   415→      toast.error('Gagal memperbarui invoice');
+   416→    }
+   417→  };
+   418→
+   419→  const handleStatusChange = (status: string) => {
+   420→    updateInvoice({ status });
+   421→  };
+   422→
+   423→  const handleTaxInvoiceSave = () => {
+   424→    if (!invoice) return;
+   425→    const isCreated = invoice.taxInvoiceStatus === 'created';
+   426→    updateInvoice({
+   427→      taxInvoiceStatus: isCreated ? 'not_created' : 'created',
+   428→      taxInvoiceDate: isCreated ? null : new Date().toISOString(),
+   429→    });
+   430→  };
+   431→
+   432→  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+   433→    const file = e.target.files?.[0];
+   434→    if (!file) return;
+   435→    const reader = new FileReader();
+   436→    reader.onload = () => {
+   437→      if (invoice && reader.result) {
+   438→        updateInvoice({ taxInvoiceImage: reader.result as string });
+   439→      }
+   440→    };
+   441→    reader.readAsDataURL(file);
+   442→  };
+   443→
+   444→  // Print / PDF functions
+   445→  const getPrintHTML = () => {
+   446→    if (!invoice) return '';
+   447→    return generatePrintHTML(invoice, settings);
+   448→  };
+   449→
+   450→  const handlePrint = () => {
+   451→    const html = getPrintHTML();
+   452→    const iframe = document.createElement('iframe');
+   453→    iframe.style.position = 'fixed';
+   454→    iframe.style.left = '-9999px';
+   455→    iframe.style.top = '-9999px';
+   456→    document.body.appendChild(iframe);
+   457→    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+   458→    if (!doc) return;
+   459→    doc.open();
+   460→    doc.write(html);
+   461→    doc.close();
+   462→    iframe.contentWindow?.focus();
+   463→    iframe.contentWindow?.print();
+   464→    setTimeout(() => document.body.removeChild(iframe), 5000);
+   465→  };
+   466→
+   467→  const handleDownloadPDF = () => {
+   468→    const html = getPrintHTML();
+   469→    const iframe = document.createElement('iframe');
+   470→    iframe.style.position = 'fixed';
+   471→    iframe.style.left = '-9999px';
+   472→    iframe.style.top = '-9999px';
+   473→    document.body.appendChild(iframe);
+   474→    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+   475→    if (!doc) return;
+   476→    doc.open();
+   477→    doc.write(html);
+   478→    doc.close();
+   479→    // Wait for images to load then trigger print (Save as PDF)
+   480→    setTimeout(() => {
+   481→      iframe.contentWindow?.print();
+   482→      setTimeout(() => document.body.removeChild(iframe), 10000);
+   483→    }, 1500);
+   484→  };
+   485→
+   486→  const handleWhatsAppShare = () => {
+   487→    if (!invoice) return;
+   488→    const msg = `Yth. ${invoice.customer.pic},\n\nBerikut invoice kami:\nNo: ${invoice.invoiceNumber}\nTotal: Rp ${formatCurrency(invoice.total)}\nTanggal: ${formatDate(invoice.issueDate)}\n\nTerima kasih.`;
+   489→    const phone = invoice.customer.whatsapp.replace(/[^0-9]/g, '');
+   490→    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+   491→  };
+   492→
+   493→  if (loading || !invoice) {
+   494→    return (
+   495→      <Dialog open={open} onOpenChange={onOpenChange}>
+   496→        <DialogContent className="max-w-3xl">
+   497→          <div className="p-8 text-center text-muted-foreground">Memuat...</div>
+   498→        </DialogContent>
+   499→      </Dialog>
+   500→    );
+   501→  }
+   502→
+   503→  const sc = statusConfig[invoice.status] || statusConfig.draft;
+   504→
+   505→  return (
+   506→    <>
+   507→      <Dialog open={open} onOpenChange={onOpenChange}>
+   508→        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+   509→          <DialogHeader>
+   510→            <div className="flex items-center justify-between">
+   511→              <div className="flex items-center gap-3">
+   512→                <DialogTitle className="text-base">{invoice.invoiceNumber}</DialogTitle>
+   513→                {invoice.taxInvoiceNumber && (
+   514→                  <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 text-xs">
+   515→                    FP: {invoice.taxInvoiceNumber}
+   516→                  </Badge>
+   517→                )}
+   518→              </div>
+   519→              <div className="flex items-center gap-2">
+   520→                <Badge className={sc.className}>{sc.label}</Badge>
+   521→                <Select value={invoice.status} onValueChange={handleStatusChange}>
+   522→                  <SelectTrigger className="w-32 h-8 text-xs">
+   523→                    <SelectValue />
+   524→                  </SelectTrigger>
+   525→                  <SelectContent>
+   526→                    <SelectItem value="draft">Draft</SelectItem>
+   527→                    <SelectItem value="unpaid">Belum Lunas</SelectItem>
+   528→                    <SelectItem value="paid">Lunas</SelectItem>
+   529→                  </SelectContent>
+   530→                </Select>
+   531→              </div>
+   532→            </div>
+   533→          </DialogHeader>
+   534→
+   535→          <Tabs value={activeTab} onValueChange={setActiveTab}>
+   536→            <TabsList className="grid w-full grid-cols-3">
+   537→              <TabsTrigger value="invoice">Invoice</TabsTrigger>
+   538→              <TabsTrigger value="faktur">Faktur Pajak</TabsTrigger>
+   539→              <TabsTrigger value="aksi">Aksi</TabsTrigger>
+   540→            </TabsList>
+   541→
+   542→            <TabsContent value="invoice" className="mt-4">
+   543→              <div id="invoice-print-area">
+   544→                <div className="space-y-6 text-sm">
+   545→                  {/* Header */}
+   546→                  <div className="flex justify-between items-start gap-4">
+   547→                    <div>
+   548→                      {settings?.logo && <img src={settings.logo} alt="Logo" className="h-14 mb-2" />}
+   549→                      <h2 className="font-bold text-base">{settings?.companyName || 'PT Pest Killer Ngalam'}</h2>
+   550→                      <p className="text-muted-foreground text-xs">{settings?.address}</p>
+   551→                      <p className="text-muted-foreground text-xs">{settings?.phone} | {settings?.email}</p>
+   552→                      {settings?.npwp && <p className="text-muted-foreground text-xs">NPWP: {settings.npwp}</p>}
+   553→                    </div>
+   554→                    <div className="text-right">
+   555→                      <h3 className="font-bold text-lg text-emerald-700">INVOICE</h3>
+   556→                      <p className="font-medium">{invoice.invoiceNumber}</p>
+   557→                      <p className="text-muted-foreground">Tanggal: {formatDate(invoice.issueDate)}</p>
+   558→                      <p className="text-muted-foreground">Jatuh Tempo: {formatDate(invoice.dueDate)}</p>
+   559→                    </div>
+   560→                  </div>
+   561→
+   562→                  {/* Tax Invoice Number Badge */}
+   563→                  {invoice.taxInvoiceNumber && (
+   564→                    <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-2 text-center">
+   565→                      <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+   566→                        No. Faktur Pajak: {invoice.taxInvoiceNumber}
+   567→                        {invoice.taxInvoiceDate && ` — Tanggal: ${formatDate(invoice.taxInvoiceDate)}`}
+   568→                      </span>
+   569→                    </div>
+   570→                  )}
+   571→
+   572→                  {/* Customer */}
+   573→                  <div className="bg-muted/50 rounded-lg p-3">
+   574→                    <p className="font-semibold mb-1">Kepada:</p>
+   575→                    <p className="font-medium">{invoice.customer.companyName}</p>
+   576→                    <p className="text-muted-foreground">PIC: {invoice.customer.pic}</p>
+   577→                    {invoice.customer.address && <p className="text-muted-foreground">{invoice.customer.address}</p>}
+   578→                    {invoice.customer.npwp && <p className="text-muted-foreground">NPWP: {invoice.customer.npwp}</p>}
+   579→                  </div>
+   580→
+   581→                  {/* Items Table */}
+   582→                  <Table>
+   583→                    <TableHeader>
+   584→                      <TableRow>
+   585→                        <TableHead>No</TableHead>
+   586→                        <TableHead>Deskripsi</TableHead>
+   587→                        <TableHead className="text-right">Qty</TableHead>
+   588→                        <TableHead className="text-right">Harga</TableHead>
+   589→                        <TableHead className="text-right">Total</TableHead>
+   590→                      </TableRow>
+   591→                    </TableHeader>
+   592→                    <TableBody>
+   593→                      {invoice.items.map((item, idx) => (
+   594→                        <TableRow key={item.id}>
+   595→                          <TableCell>{idx + 1}</TableCell>
+   596→                          <TableCell>{item.description}</TableCell>
+   597→                          <TableCell className="text-right">{item.qty}</TableCell>
+   598→                          <TableCell className="text-right">{formatCurrency(item.unitPrice)}</TableCell>
+   599→                          <TableCell className="text-right">{formatCurrency(item.total)}</TableCell>
+   600→                        </TableRow>
+   601→                      ))}
+   602→                    </TableBody>
+   603→                  </Table>
+   604→
+   605→                  {/* Totals */}
+   606→                  <div className="flex justify-end">
+   607→                    <div className="w-72 space-y-1">
+   608→                      <div className="flex justify-between text-sm">
+   609→                        <span>Subtotal</span>
+   610→                        <span>{formatCurrency(invoice.subtotal)}</span>
+   611→                      </div>
+   612→                      {invoice.taxAmount > 0 && invoice.taxType === 'ppn12' && (() => {
+   613→                        const dppR = Math.ceil((invoice.subtotal / 1.12) / 1000) * 1000;
+   614→                        const ppn = Math.round(dppR * 0.12);
+   615→                        return (
+   616→                          <>
+   617→                            <div className="flex justify-between text-sm">
+   618→                              <span>DPP (dibulatkan)</span>
+   619→                              <span>{formatCurrency(dppR)}</span>
+   620→                            </div>
+   621→                            <div className="flex justify-between text-sm">
+   622→                              <span>PPN 12%</span>
+   623→                              <span>{formatCurrency(ppn)}</span>
+   624→                            </div>
+   625→                          </>
+   626→                        );
+   627→                      })()}
+   628→                      {invoice.discount > 0 && (
+   629→                        <div className="flex justify-between text-sm">
+   630→                          <span>Diskon</span>
+   631→                          <span>- {formatCurrency(invoice.discount)}</span>
+   632→                        </div>
+   633→                      )}
+   634→                      <div className="flex justify-between font-bold text-lg border-t pt-2">
+   635→                        <span>Total</span>
+   636→                        <span className="text-emerald-700">{formatCurrency(invoice.total)}</span>
+   637→                      </div>
+   638→                    </div>
+   639→                  </div>
+   640→
+   641→                  {/* Terbilang */}
+   642→                  <div className="bg-emerald-50 dark:bg-emerald-950/50 rounded-lg p-3 text-center">
+   643→                    <p className="text-xs text-muted-foreground">Terbilang:</p>
+   644→                    <p className="font-medium text-emerald-700">{terbilang(invoice.total)}</p>
+   645→                  </div>
+   646→
+   647→                  {/* Notes */}
+   648→                  {invoice.notes && (
+   649→                    <div>
+   650→                      <p className="font-semibold mb-1">Catatan:</p>
+   651→                      <p className="text-muted-foreground">{invoice.notes}</p>
+   652→                    </div>
+   653→                  )}
+   654→
+   655→                  {/* Bank */}
+   656→                  {settings?.bankName && (
+   657→                    <div className="bg-muted/50 rounded-lg p-3">
+   658→                      <p className="font-semibold mb-1">Pembayaran:</p>
+   659→                      <p>{settings.bankName} - {settings.bankAccount} a.n. {settings.bankHolder}</p>
+   660→                    </div>
+   661→                  )}
+   662→
+   663→                  {/* Stamp */}
+   664→                  <div className="flex justify-end mt-8">
+   665→                    <div className="text-center">
+   666→                      {settings?.stamp && <img src={settings.stamp} alt="Stempel" className="h-20 mb-2" />}
+   667→                      <p>Hormat kami,</p>
+   668→                      <div className="mt-12">
+   669→                        <p className="font-medium">{settings?.companyName || 'PT Pest Killer Ngalam'}</p>
+   670→                      </div>
+   671→                    </div>
+   672→                  </div>
+   673→
+   674→                  {/* Tax Invoice Image Preview */}
+   675→                  {invoice.taxInvoiceImage && (
+   676→                    <div className="border-t-2 border-dashed border-emerald-300 pt-4">
+   677→                      <p className="text-center text-xs font-semibold text-emerald-600 mb-2 uppercase tracking-wider">Faktur Pajak</p>
+   678→                      <img src={invoice.taxInvoiceImage} alt="Faktur Pajak" className="max-h-64 mx-auto rounded-lg border" />
+   679→                    </div>
+   680→                  )}
+   681→                </div>
+   682→              </div>
+   683→            </TabsContent>
+   684→
+   685→            <TabsContent value="faktur" className="mt-4">
+   686→              <div className="space-y-4">
+   687→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   688→                  <div className="space-y-2">
+   689→                    <Label>Nomor Faktur Pajak</Label>
+   690→                    <Input
+   691→                      value={invoice.taxInvoiceNumber}
+   692→                      onChange={(e) => updateInvoice({ taxInvoiceNumber: e.target.value })}
+   693→                      placeholder="Masukkan nomor faktur pajak"
+   694→                    />
+   695→                  </div>
+   696→                  <div className="space-y-2">
+   697→                    <Label>Tanggal Faktur Pajak</Label>
+   698→                    <Input
+   699→                      type="date"
+   700→                      value={invoice.taxInvoiceDate?.split('T')[0] || ''}
+   701→                      onChange={(e) => updateInvoice({ taxInvoiceDate: e.target.value || null })}
+   702→                    />
+   703→                  </div>
+   704→                </div>
+   705→                <div className="flex items-center gap-3">
+   706→                  <Button
+   707→                    variant={invoice.taxInvoiceStatus === 'created' ? 'default' : 'outline'}
+   708→                    className={invoice.taxInvoiceStatus === 'created' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+   709→                    onClick={handleTaxInvoiceSave}
+   710→                  >
+   711→                    <FileCheck className="w-4 h-4 mr-1" />
+   712→                    {invoice.taxInvoiceStatus === 'created' ? 'Faktur Sudah Dibuat' : 'Tandai Faktur Dibuat'}
+   713→                  </Button>
+   714→                </div>
+   715→                <div className="space-y-2">
+   716→                  <Label>Upload Gambar Faktur Pajak</Label>
+   717→                  <p className="text-xs text-muted-foreground">Gambar akan otomatis digabungkan ke dalam PDF invoice</p>
+   718→                  <Input type="file" accept="image/*" onChange={handleImageUpload} />
+   719→                  {invoice.taxInvoiceImage && (
+   720→                    <div className="relative inline-block">
+   721→                      <img src={invoice.taxInvoiceImage} alt="Faktur Pajak" className="max-h-48 rounded-lg border" />
+   722→                      <Button
+   723→                        variant="destructive"
+   724→                        size="icon"
+   725→                        className="absolute -top-2 -right-2 h-6 w-6"
+   726→                        onClick={() => updateInvoice({ taxInvoiceImage: '' })}
+   727→                      >
+   728→                        <X className="w-3 h-3" />
+   729→                      </Button>
+   730→                    </div>
+   731→                  )}
+   732→                </div>
+   733→              </div>
+   734→            </TabsContent>
+   735→
+   736→            <TabsContent value="aksi" className="mt-4">
+   737→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   738→                <Button onClick={handlePrint} className="h-20" variant="outline">
+   739→                  <Printer className="w-8 h-8 mr-3" />
+   740→                  <div className="text-left">
+   741→                    <p className="font-medium">Cetak Invoice</p>
+   742→                    <p className="text-xs text-muted-foreground">Buka dialog cetak</p>
+   743→                  </div>
+   744→                </Button>
+   745→                <Button onClick={handleDownloadPDF} className="h-20 bg-red-600 hover:bg-red-700 text-white">
+   746→                  <FileDown className="w-8 h-8 mr-3" />
+   747→                  <div className="text-left">
+   748→                    <p className="font-medium">Download PDF</p>
+   749→                    <p className="text-xs">Simpan sebagai PDF</p>
+   750→                  </div>
+   751→                </Button>
+   752→                <Button onClick={() => setPreviewOpen(true)} className="h-20" variant="outline">
+   753→                  <Eye className="w-8 h-8 mr-3" />
+   754→                  <div className="text-left">
+   755→                    <p className="font-medium">Preview Invoice</p>
+   756→                    <p className="text-xs text-muted-foreground">Lihat tampilan akhir</p>
+   757→                  </div>
+   758→                </Button>
+   759→                <Button onClick={handleWhatsAppShare} className="h-20 bg-green-600 hover:bg-green-700 text-white">
+   760→                  <MessageSquare className="w-8 h-8 mr-3" />
+   761→                  <div className="text-left">
+   762→                    <p className="font-medium">Kirim via WhatsApp</p>
+   763→                    <p className="text-xs">Kirim ke pelanggan</p>
+   764→                  </div>
+   765→                </Button>
+   766→              </div>
+   767→            </TabsContent>
+   768→          </Tabs>
+   769→        </DialogContent>
+   770→      </Dialog>
+   771→
+   772→      {/* Preview Fullscreen Modal */}
+   773→      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+   774→        <DialogContent className="max-w-4xl max-h-[95vh] p-0">
+   775→          <div className="flex items-center justify-between p-3 border-b bg-muted/50">
+   776→            <DialogTitle className="text-sm font-medium">Preview Invoice</DialogTitle>
+   777→            <div className="flex gap-2">
+   778→              <Button size="sm" onClick={handleDownloadPDF} className="bg-red-600 hover:bg-red-700 text-white">
+   779→                <FileDown className="w-4 h-4 mr-1" /> PDF
+   780→              </Button>
+   781→              <Button size="sm" variant="outline" onClick={handlePrint}>
+   782→                <Printer className="w-4 h-4 mr-1" /> Cetak
+   783→              </Button>
+   784→            </div>
+   785→          </div>
+   786→          <div className="overflow-auto" style={{ height: 'calc(95vh - 56px)' }}>
+   787→            <iframe
+   788→              srcDoc={getPrintHTML()}
+   789→              className="w-full min-h-full border-0"
+   790→              style={{ minWidth: '210mm' }}
+   791→              title="Invoice Preview"
+   792→            />
+   793→          </div>
+   794→        </DialogContent>
+   795→      </Dialog>
+   796→    </>
+   797→  );
+   798→}
