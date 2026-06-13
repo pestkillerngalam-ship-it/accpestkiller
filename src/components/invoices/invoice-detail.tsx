@@ -214,267 +214,218 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
   const generatePrintHTML = () => {
     if (!invoice) return '';
     var companyName = settings && settings.companyName ? settings.companyName : 'PT Pest Killer Ngalam';
-    var logoHTML = settings && settings.logo
-      ? '<img src="' + settings.logo + '" style="max-height:55px;max-width:150px;object-fit:contain;" />'
-      : '';
-    var stampHTML = settings && settings.stamp
-      ? '<img src="' + settings.stamp + '" style="height:90px;width:auto;object-fit:contain;" />'
-      : '';
-
-    var pajakResult = hitungPajak(invoice.subtotal, invoice.taxType, 0);
-    var dppNilaiLain = pajakResult.dppNilaiLain;
-
-    // Tax rows for totals section
-    var taxRowsHTML = '';
-    if ((invoice.taxType === 'include_pajak' || invoice.taxType === 'inclusive_ppn' || invoice.taxType === 'exclude_pajak' || invoice.taxType === 'non_inclusive_ppn') && invoice.taxAmount > 0) {
-      taxRowsHTML = '<tr>'
-        + '<td style="padding:4px 0;font-size:10px;color:#555;border:none;">DPP Nilai Lain (11/12)</td>'
-        + '<td style="padding:4px 0;font-size:10px;color:#333;text-align:right;border:none;">' + formatCurrency(dppNilaiLain) + '</td>'
-        + '</tr>'
-        + '<tr>'
-        + '<td style="padding:4px 0;font-size:10px;color:#555;border:none;">PPN 12% x DPP Nilai Lain</td>'
-        + '<td style="padding:4px 0;font-size:10px;color:#333;text-align:right;border:none;">' + formatCurrency(invoice.taxAmount) + '</td>'
-        + '</tr>';
-    }
-
-    // Faktur pajak info rows
-    var fakturRowsHTML = '';
-    if (invoice.taxInvoiceNumber) {
-      fakturRowsHTML += '<tr>'
-        + '<td style="padding:2px 0;font-size:9px;color:#888;border:none;vertical-align:top;">No. Faktur Pajak</td>'
-        + '<td style="padding:2px 0;font-size:9px;color:#333;border:none;font-weight:600;">: ' + invoice.taxInvoiceNumber + '</td>'
-        + '</tr>';
-    }
-    if (invoice.taxInvoiceDate) {
-      fakturRowsHTML += '<tr>'
-        + '<td style="padding:2px 0;font-size:9px;color:#888;border:none;">Tgl. Faktur Pajak</td>'
-        + '<td style="padding:2px 0;font-size:9px;color:#333;border:none;">: ' + formatDate(invoice.taxInvoiceDate) + '</td>'
-        + '</tr>';
-    }
-
-    // Items rows — ALL inline styles, no CSS classes
-    var itemsHTML = '';
-    for (var i = 0; i < invoice.items.length; i++) {
-      var item = invoice.items[i];
-      itemsHTML += '<tr>'
-        + '<td style="width:30px;text-align:center;padding:7px 4px;font-size:10px;color:#333;border-bottom:1px solid #eee;">' + (i + 1) + '</td>'
-        + '<td style="padding:7px 6px;font-size:10px;color:#333;border-bottom:1px solid #eee;">' + item.description + '</td>'
-        + '<td style="width:50px;text-align:right;padding:7px 8px;font-size:10px;color:#333;border-bottom:1px solid #eee;">' + item.qty + '</td>'
-        + '<td style="width:110px;text-align:right;padding:7px 8px;font-size:10px;color:#333;border-bottom:1px solid #eee;">' + formatCurrency(item.unitPrice) + '</td>'
-        + '<td style="width:120px;text-align:right;padding:7px 8px;font-size:10px;color:#333;border-bottom:1px solid #eee;">' + formatCurrency(item.total) + '</td>'
-        + '</tr>';
-    }
-
-    // Discount row
-    var discountHTML = '';
-    if (invoice.discount > 0) {
-      discountHTML = '<tr>'
-        + '<td style="padding:4px 0;font-size:10px;color:#555;border:none;">Diskon</td>'
-        + '<td style="padding:4px 0;font-size:10px;color:#dc2626;text-align:right;border:none;">- ' + formatCurrency(invoice.discount) + '</td>'
-        + '</tr>';
-    }
-
-    // Notes
-    var notesHTML = '';
-    if (invoice.notes) {
-      notesHTML = '<p style="font-size:9px;color:#666;margin:8px 0 0 0;"><b>Catatan:</b> ' + invoice.notes + '</p>';
-    }
-
-    // Bank info block
-    var bankHTML = '';
-    if (settings && settings.bankName) {
-      bankHTML = '<table style="width:100%;border-collapse:collapse;border:1px solid #e0e0e0;margin-top:10px;background:#fafbfc;">'
-        + '<tr><td colspan="2" style="padding:6px 10px;font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#1e3a5f;font-weight:700;border-bottom:1px solid #e0e0e0;background:#eef2f7;">Informasi Pembayaran</td></tr>'
-        + '<tr>'
-        + '<td style="padding:4px 10px;font-size:9px;color:#888;border:none;width:90px;">Bank</td>'
-        + '<td style="padding:4px 10px;font-size:10px;color:#333;border:none;font-weight:600;">: ' + settings.bankName + '</td>'
-        + '</tr>'
-        + '<tr>'
-        + '<td style="padding:4px 10px;font-size:9px;color:#888;border:none;">No. Rekening</td>'
-        + '<td style="padding:4px 10px;font-size:10px;color:#333;border:none;">: ' + settings.bankAccount + '</td>'
-        + '</tr>'
-        + '<tr>'
-        + '<td style="padding:4px 10px;font-size:9px;color:#888;border:none;">a.n.</td>'
-        + '<td style="padding:4px 10px;font-size:10px;color:#333;border:none;">: ' + settings.bankHolder + '</td>'
-        + '</tr>'
-        + '</table>';
-    }
-
-    // Customer NPWP row
-    var npwpHTML = '';
-    if (invoice.customer.npwp) {
-      npwpHTML = '<tr>'
-        + '<td style="padding:2px 0;font-size:9px;color:#888;border:none;">NPWP</td>'
-        + '<td style="padding:2px 0;font-size:9px;color:#333;border:none;">: ' + invoice.customer.npwp + '</td>'
-        + '</tr>';
-    }
-
-    // Customer address row
-    var addrHTML = '';
-    if (invoice.customer.address) {
-      addrHTML = '<tr>'
-        + '<td style="padding:2px 0;font-size:9px;color:#888;border:none;vertical-align:top;">Alamat</td>'
-        + '<td style="padding:2px 0;font-size:9px;color:#333;border:none;">: ' + invoice.customer.address + '</td>'
-        + '</tr>';
-    }
-
     var companyAddress = settings && settings.address ? settings.address : '';
     var companyPhone = settings && settings.phone ? settings.phone : '';
     var companyEmail = settings && settings.email ? settings.email : '';
     var companyNPWP = settings && settings.npwp ? settings.npwp : '';
+    var directorName = settings && settings.bankHolder ? settings.bankHolder : 'Sulianto';
 
-    // ==================== NEW PROFESSIONAL TEMPLATE ====================
-    // Design: Navy corporate theme, 100% inline styles, no CSS classes
-    // Reliable for all browsers and PDF renderers
+    var logoHTML = settings && settings.logo
+      ? '<img src="' + settings.logo + '" style="max-height:45px;max-width:120px;object-fit:contain;" />'
+      : '';
 
-    var html = '<!DOCTYPE html><html><head><title>Invoice</title>'
+    // ========== DETERMINE TAX STATUS ==========
+    var hasTax = (invoice.taxType === 'include_pajak' || invoice.taxType === 'inclusive_ppn' || invoice.taxType === 'exclude_pajak' || invoice.taxType === 'non_inclusive_ppn') && invoice.taxAmount > 0;
+
+    // ========== CALCULATE DISPLAY VALUES ==========
+    var pajakResult = hitungPajak(invoice.subtotal, invoice.taxType, 0);
+    var hargaJual = invoice.subtotal;
+    var dppNilaiLain = 0;
+    var ppnAmount = 0;
+
+    if (hasTax) {
+      if (invoice.taxType === 'include_pajak' || invoice.taxType === 'inclusive_ppn') {
+        hargaJual = Math.round(invoice.subtotal / 1.11);
+      }
+      dppNilaiLain = pajakResult.dppNilaiLain;
+      ppnAmount = invoice.taxAmount;
+    }
+
+    // ========== DOCUMENT TITLE ==========
+    var docTitle = hasTax ? 'INVOICE & FAKTUR PAJAK' : 'INVOICE';
+
+    // ========== SIGNATURE DATE ==========
+    var signDate = 'Malang, ' + formatDate(invoice.issueDate);
+
+    // ========== BUILD ITEMS HTML ==========
+    var itemsHTML = '';
+    for (var i = 0; i < invoice.items.length; i++) {
+      var item = invoice.items[i];
+      itemsHTML += '<tr>'
+        + '<td style="width:25px;text-align:center;padding:4px 3px;font-size:9pt;color:#333;border-bottom:1px solid #e5e5e5;">' + (i + 1) + '</td>'
+        + '<td style="padding:4px 4px;font-size:9pt;color:#333;border-bottom:1px solid #e5e5e5;">' + item.description + '</td>'
+        + '<td style="width:40px;text-align:center;padding:4px 3px;font-size:9pt;color:#333;border-bottom:1px solid #e5e5e5;">' + item.qty + '</td>'
+        + '<td style="width:95px;text-align:right;padding:4px 4px;font-size:9pt;color:#333;border-bottom:1px solid #e5e5e5;">' + formatCurrency(item.unitPrice) + '</td>'
+        + '<td style="width:105px;text-align:right;padding:4px 4px;font-size:9pt;color:#333;border-bottom:1px solid #e5e5e5;">' + formatCurrency(item.total) + '</td>'
+        + '</tr>';
+    }
+
+    // ========== BUILD CALCULATION SUMMARY (right column) ==========
+    var calcHTML = '';
+    if (hasTax) {
+      calcHTML += '<tr><td style="padding:2px 0;font-size:9pt;color:#555;border:none;">Harga Jual/Penggantian</td><td style="padding:2px 0;font-size:9pt;color:#333;text-align:right;border:none;">' + formatCurrency(hargaJual) + '</td></tr>';
+      calcHTML += '<tr><td style="padding:2px 0;font-size:9pt;color:#555;border:none;">DPP Nilai Lain (11/12)</td><td style="padding:2px 0;font-size:9pt;color:#333;text-align:right;border:none;">' + formatCurrency(dppNilaiLain) + '</td></tr>';
+      calcHTML += '<tr><td style="padding:2px 0;font-size:9pt;color:#555;border:none;">PPN 12%</td><td style="padding:2px 0;font-size:9pt;color:#333;text-align:right;border:none;">' + formatCurrency(ppnAmount) + '</td></tr>';
+    } else {
+      calcHTML += '<tr><td style="padding:2px 0;font-size:9pt;color:#555;border:none;">Harga Jual/Penggantian</td><td style="padding:2px 0;font-size:9pt;color:#333;text-align:right;border:none;">' + formatCurrency(hargaJual) + '</td></tr>';
+    }
+
+    if (invoice.discount > 0) {
+      calcHTML += '<tr><td style="padding:2px 0;font-size:9pt;color:#dc2626;border:none;">Diskon</td><td style="padding:2px 0;font-size:9pt;color:#dc2626;text-align:right;border:none;">- ' + formatCurrency(invoice.discount) + '</td></tr>';
+    }
+
+    // ========== FAKTUR PAJAK ROWS (only if hasTax) ==========
+    var fakturRowsHTML = '';
+    if (hasTax) {
+      if (invoice.taxInvoiceNumber) {
+        fakturRowsHTML += '<tr><td style="padding:1px 0;font-size:8pt;color:#666;border:none;">No. Faktur Pajak</td><td style="padding:1px 0;font-size:8pt;border:none;">: ' + invoice.taxInvoiceNumber + '</td></tr>';
+      }
+      if (invoice.taxInvoiceDate) {
+        fakturRowsHTML += '<tr><td style="padding:1px 0;font-size:8pt;color:#666;border:none;">Tgl Faktur Pajak</td><td style="padding:1px 0;font-size:8pt;border:none;">: ' + formatDate(invoice.taxInvoiceDate) + '</td></tr>';
+      }
+    }
+
+    // ========== CUSTOMER DATA ROWS ==========
+    var customerAddrHTML = '';
+    if (invoice.customer.address) {
+      customerAddrHTML = '<tr><td style="padding:1px 0;font-size:8pt;color:#666;border:none;vertical-align:top;">Alamat</td><td style="padding:1px 0;font-size:8pt;border:none;">: ' + invoice.customer.address + '</td></tr>';
+    }
+    var customerNPWPHTML = '';
+    if (invoice.customer.npwp) {
+      customerNPWPHTML = '<tr><td style="padding:1px 0;font-size:8pt;color:#666;border:none;">NPWP Pembeli</td><td style="padding:1px 0;font-size:8pt;border:none;">: ' + invoice.customer.npwp + '</td></tr>';
+    }
+
+    // ========== BANK INFO BOX ==========
+    var bankHTML = '';
+    if (settings && settings.bankName) {
+      bankHTML = '<div style="border:1px solid #d0d0d0;padding:4px 7px;">'
+        + '<div style="font-size:7pt;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Informasi Rekening Bank Transfer</div>'
+        + '<table style="width:100%;border:none;"><tbody>'
+        + '<tr><td style="padding:1px 0;font-size:8pt;color:#666;border:none;">Bank</td><td style="padding:1px 0;font-size:8pt;border:none;font-weight:600;">: ' + settings.bankName + '</td></tr>'
+        + '<tr><td style="padding:1px 0;font-size:8pt;color:#666;border:none;">No. Rekening</td><td style="padding:1px 0;font-size:8pt;border:none;">: ' + settings.bankAccount + '</td></tr>'
+        + '<tr><td style="padding:1px 0;font-size:8pt;color:#666;border:none;">a.n.</td><td style="padding:1px 0;font-size:8pt;border:none;">: ' + settings.bankHolder + '</td></tr>'
+        + '</tbody></table></div>';
+    }
+
+    // ========== NOTES ==========
+    var notesHTML = '';
+    if (invoice.notes) {
+      notesHTML = '<p style="font-size:8pt;color:#666;margin:4px 0 0 0;"><b>Catatan:</b> ' + invoice.notes + '</p>';
+    }
+
+    // ========== STAMP CONTENT ==========
+    var stampContentHTML = '';
+    if (settings && settings.stamp) {
+      stampContentHTML = '<div style="height:70px;"><img src="' + settings.stamp + '" style="height:70px;width:auto;display:block;opacity:0.85;" /></div>';
+    } else {
+      stampContentHTML = '<div style="height:70px;"></div>';
+    }
+
+    // ==================== 1-LEMBAR A4: INVOICE & FAKTUR PAJAK GABUNGAN ====================
+    var html = '<!DOCTYPE html><html><head><title>' + docTitle + '</title>'
       + '<style>'
-      + '@page{size:A4;margin:15mm 18mm;}'
+      + '@page{size:A4;margin:10mm 12mm;}'
       + '*{box-sizing:border-box;margin:0;padding:0;}'
-      + 'body{font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.5;font-size:10px;}'
+      + 'body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#222;line-height:1.4;}'
       + '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}'
       + '</style></head><body>'
-      + '<table style="width:100%;border-collapse:collapse;max-width:210mm;margin:0 auto;">'
 
-      // ===== TOP ACCENT BAR (navy gradient) =====
-      + '<tr><td colspan="2" style="height:5px;background:linear-gradient(90deg,#1e3a5f,#2c5282,#3182ce);border:none;padding:0;"></td></tr>'
-
-      // ===== HEADER SECTION =====
+      // ===== 1. HEADER (2 Kolom) =====
+      + '<table width="100%" style="border-collapse:collapse;margin-bottom:5px;">'
       + '<tr>'
-      // Left: Logo + Company info
-      + '<td style="width:55%;vertical-align:top;padding:16px 0 0 0;border:none;">'
-      + (logoHTML ? '<div style="margin-bottom:6px;">' + logoHTML + '</div>' : '')
-      + '<div style="font-size:16px;font-weight:700;color:#1e3a5f;letter-spacing:0.5px;">' + companyName + '</div>'
-      + '<div style="font-size:9px;color:#666;line-height:1.6;margin-top:3px;">'
+      + '<td style="width:58%;vertical-align:top;padding:0;">'
+      + (logoHTML ? '<div style="margin-bottom:3px;">' + logoHTML + '</div>' : '')
+      + '<div style="font-size:12pt;font-weight:700;color:#1e3a5f;">' + companyName + '</div>'
+      + '<div style="font-size:8pt;color:#555;line-height:1.5;margin-top:1px;">'
       + (companyAddress ? companyAddress + '<br/>' : '')
       + (companyPhone ? 'Telp: ' + companyPhone : '')
       + (companyPhone && companyEmail ? ' | ' : '')
-      + (companyEmail ? companyEmail + '<br/>' : (companyPhone ? '<br/>' : ''))
-      + (companyNPWP ? 'NPWP: ' + companyNPWP : '')
+      + (companyEmail ? companyEmail : '')
       + '</div>'
+      + (companyNPWP ? '<div style="font-size:8pt;color:#555;">NPWP Penjual: ' + companyNPWP + '</div>' : '')
       + '</td>'
-      // Right: INVOICE title
-      + '<td style="width:45%;vertical-align:top;text-align:right;padding:16px 0 0 0;border:none;">'
-      + '<div style="font-size:28px;font-weight:700;color:#1e3a5f;letter-spacing:4px;">INVOICE</div>'
-      + '<div style="font-size:11px;font-weight:600;color:#2c5282;margin-top:2px;">' + invoice.invoiceNumber + '</div>'
+      + '<td style="width:42%;vertical-align:top;text-align:right;padding:0;">'
+      + '<div style="font-size:15pt;font-weight:700;color:#1e3a5f;letter-spacing:2px;">' + docTitle + '</div>'
       + '</td>'
-      + '</tr>'
+      + '</tr></table>'
 
-      // ===== NAVY DIVIDER =====
-      + '<tr><td colspan="2" style="height:3px;background:#1e3a5f;border:none;padding:0;margin-top:10px;"></td></tr>'
+      // ===== GARIS PEMISAH =====
+      + '<div style="height:2px;background:#1e3a5f;margin:3px 0 6px 0;"></div>'
 
-      // ===== INFO SECTION: 2 columns =====
+      // ===== 2. BLOK DATA (2 Kolom Sejajar) =====
+      + '<table width="100%" style="border-collapse:collapse;margin-bottom:6px;">'
       + '<tr>'
-      // Left: Invoice details
-      + '<td style="width:50%;vertical-align:top;padding:14px 10px 0 0;border:none;">'
-      + '<div style="font-size:8px;text-transform:uppercase;letter-spacing:1.5px;color:#1e3a5f;font-weight:700;padding-bottom:4px;border-bottom:2px solid #1e3a5f;display:inline-block;margin-bottom:6px;">Detail Invoice</div>'
-      + '<table style="width:100%;border-collapse:collapse;"><tbody>'
-      + '<tr><td style="padding:2px 0;font-size:9px;color:#888;border:none;">No. Invoice</td><td style="padding:2px 0;font-size:9px;color:#333;border:none;font-weight:600;">: ' + invoice.invoiceNumber + '</td></tr>'
-      + '<tr><td style="padding:2px 0;font-size:9px;color:#888;border:none;">Tanggal</td><td style="padding:2px 0;font-size:9px;color:#333;border:none;">: ' + formatDate(invoice.issueDate) + '</td></tr>'
-      + '<tr><td style="padding:2px 0;font-size:9px;color:#888;border:none;">Jatuh Tempo</td><td style="padding:2px 0;font-size:9px;color:#333;border:none;">: ' + formatDate(invoice.dueDate) + '</td></tr>'
+      + '<td style="width:50%;vertical-align:top;padding-right:10px;">'
+      + '<div style="font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#1e3a5f;border-bottom:1.5px solid #1e3a5f;display:inline-block;margin-bottom:3px;padding-bottom:1px;">Kepada</div>'
+      + '<table style="width:100%;border:none;"><tbody>'
+      + '<tr><td style="padding:1px 0;font-size:8pt;color:#666;border:none;">Perusahaan</td><td style="padding:1px 0;font-size:9pt;font-weight:600;border:none;">: ' + invoice.customer.companyName + '</td></tr>'
+      + '<tr><td style="padding:1px 0;font-size:8pt;color:#666;border:none;">PIC</td><td style="padding:1px 0;font-size:9pt;border:none;">: ' + invoice.customer.pic + '</td></tr>'
+      + customerAddrHTML
+      + customerNPWPHTML
+      + '</tbody></table>'
+      + '</td>'
+      + '<td style="width:50%;vertical-align:top;padding-left:10px;">'
+      + '<div style="font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#1e3a5f;border-bottom:1.5px solid #1e3a5f;display:inline-block;margin-bottom:3px;padding-bottom:1px;">Detail Dokumen</div>'
+      + '<table style="width:100%;border:none;"><tbody>'
+      + '<tr><td style="padding:1px 0;font-size:8pt;color:#666;border:none;">No. Invoice</td><td style="padding:1px 0;font-size:8pt;border:none;">: ' + invoice.invoiceNumber + '</td></tr>'
+      + '<tr><td style="padding:1px 0;font-size:8pt;color:#666;border:none;">Tanggal Invoice</td><td style="padding:1px 0;font-size:8pt;border:none;">: ' + formatDate(invoice.issueDate) + '</td></tr>'
+      + '<tr><td style="padding:1px 0;font-size:8pt;color:#666;border:none;">Jatuh Tempo</td><td style="padding:1px 0;font-size:8pt;border:none;">: ' + formatDate(invoice.dueDate) + '</td></tr>'
       + fakturRowsHTML
       + '</tbody></table>'
       + '</td>'
-      // Right: Customer info
-      + '<td style="width:50%;vertical-align:top;padding:14px 0 0 10px;border:none;">'
-      + '<div style="font-size:8px;text-transform:uppercase;letter-spacing:1.5px;color:#1e3a5f;font-weight:700;padding-bottom:4px;border-bottom:2px solid #1e3a5f;display:inline-block;margin-bottom:6px;">Bill To</div>'
-      + '<table style="width:100%;border-collapse:collapse;"><tbody>'
-      + '<tr><td style="padding:2px 0;font-size:9px;color:#888;border:none;">Perusahaan</td><td style="padding:2px 0;font-size:9px;color:#333;border:none;font-weight:600;">: ' + invoice.customer.companyName + '</td></tr>'
-      + '<tr><td style="padding:2px 0;font-size:9px;color:#888;border:none;">PIC</td><td style="padding:2px 0;font-size:9px;color:#333;border:none;">: ' + invoice.customer.pic + '</td></tr>'
-      + addrHTML
-      + npwpHTML
-      + '</tbody></table>'
-      + '</td>'
-      + '</tr>'
+      + '</tr></table>'
 
-      // ===== LIGHT DIVIDER =====
-      + '<tr><td colspan="2" style="height:1px;background:#d0d5dd;border:none;padding:0;margin-top:12px;"></td></tr>'
-
-      // ===== ITEMS TABLE =====
-      + '<tr><td colspan="2" style="padding:12px 0 0 0;border:none;">'
-      + '<table style="width:100%;border-collapse:collapse;table-layout:fixed;">'
-      // Header row
+      // ===== 3. TABEL ITEM =====
+      + '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:6px;">'
       + '<thead><tr>'
-      + '<th style="width:30px;background:#1e3a5f;color:#fff;padding:8px 4px;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;text-align:center;border:1px solid #1e3a5f;">No</th>'
-      + '<th style="background:#1e3a5f;color:#fff;padding:8px 6px;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;text-align:left;border:1px solid #1e3a5f;">Deskripsi</th>'
-      + '<th style="width:50px;background:#1e3a5f;color:#fff;padding:8px 8px;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;text-align:right;border:1px solid #1e3a5f;">Qty</th>'
-      + '<th style="width:110px;background:#1e3a5f;color:#fff;padding:8px 8px;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;text-align:right;border:1px solid #1e3a5f;">Harga Satuan</th>'
-      + '<th style="width:120px;background:#1e3a5f;color:#fff;padding:8px 8px;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;text-align:right;border:1px solid #1e3a5f;">Jumlah</th>'
+      + '<th style="width:25px;background:#1e3a5f;color:#fff;padding:4px 3px;font-size:7.5pt;text-align:center;border:1px solid #1e3a5f;">No</th>'
+      + '<th style="background:#1e3a5f;color:#fff;padding:4px 4px;font-size:7.5pt;text-align:left;border:1px solid #1e3a5f;">Deskripsi Jasa</th>'
+      + '<th style="width:40px;background:#1e3a5f;color:#fff;padding:4px 3px;font-size:7.5pt;text-align:center;border:1px solid #1e3a5f;">Qty</th>'
+      + '<th style="width:95px;background:#1e3a5f;color:#fff;padding:4px 4px;font-size:7.5pt;text-align:right;border:1px solid #1e3a5f;">Harga Satuan</th>'
+      + '<th style="width:105px;background:#1e3a5f;color:#fff;padding:4px 4px;font-size:7.5pt;text-align:right;border:1px solid #1e3a5f;">Jumlah</th>'
       + '</tr></thead>'
       + '<tbody>' + itemsHTML + '</tbody>'
       + '</table>'
-      + '</td></tr>'
 
-      // ===== TOTALS SECTION =====
-      + '<tr><td colspan="2" style="border:none;padding:10px 0 0 0;">'
-      + '<table style="width:100%;border-collapse:collapse;">'
+      // ===== 4. RINGKASAN BAWAH (2 Kolom) =====
+      + '<table width="100%" style="border-collapse:collapse;margin-bottom:8px;">'
       + '<tr>'
-      + '<td style="width:60%;border:none;padding:0;"></td>'
-      + '<td style="width:40%;border:none;padding:0;">'
-      + '<table style="width:100%;border-collapse:collapse;">'
-      + '<tr>'
-      + '<td style="padding:5px 0;font-size:10px;color:#555;border:none;text-align:left;">Subtotal</td>'
-      + '<td style="padding:5px 0;font-size:10px;color:#333;border:none;text-align:right;min-width:130px;">' + formatCurrency(invoice.subtotal) + '</td>'
-      + '</tr>'
-      + taxRowsHTML
-      + discountHTML
-      + '<tr>'
-      + '<td colspan="2" style="padding:0;border:none;height:2px;background:#1e3a5f;"></td>'
-      + '</tr>'
-      + '<tr>'
-      + '<td style="padding:6px 0 4px 0;font-size:13px;color:#1e3a5f;border:none;text-align:left;font-weight:700;">TOTAL</td>'
-      + '<td style="padding:6px 0 4px 0;font-size:13px;color:#1e3a5f;border:none;text-align:right;font-weight:700;">Rp ' + formatCurrency(invoice.total) + '</td>'
-      + '</tr>'
-      + '</table>'
+      + '<td style="width:52%;vertical-align:top;padding-right:10px;">'
+      + '<div style="border:1px solid #d0d0d0;padding:4px 7px;margin-bottom:5px;">'
+      + '<div style="font-size:7pt;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:1px;">Terbilang</div>'
+      + '<div style="font-size:9pt;font-style:italic;color:#333;">' + terbilang(invoice.total) + '</div>'
+      + '</div>'
+      + bankHTML
+      + notesHTML
       + '</td>'
+      + '<td style="width:48%;vertical-align:top;padding-left:10px;">'
+      + '<table style="width:100%;border-collapse:collapse;"><tbody>'
+      + calcHTML
+      + '<tr><td colspan="2" style="border:none;padding:0;height:1.5px;background:#1e3a5f;"></td></tr>'
+      + '<tr>'
+      + '<td style="padding:3px 0 0 0;font-size:11pt;font-weight:700;color:#1e3a5f;border:none;">TOTAL</td>'
+      + '<td style="padding:3px 0 0 0;font-size:11pt;font-weight:700;color:#1e3a5f;text-align:right;border:none;">Rp ' + formatCurrency(invoice.total) + '</td>'
       + '</tr>'
-      + '</table>'
-      + '</td></tr>'
+      + '</tbody></table>'
+      + '</td>'
+      + '</tr></table>'
 
-      // ===== TERBILANG =====
-      + '<tr><td colspan="2" style="border:none;padding:6px 0 0 0;">'
-      + '<div style="background:#eef2f7;border-left:4px solid #1e3a5f;padding:6px 12px;">'
-      + '<span style="font-size:9px;color:#555;">Terbilang: </span>'
-      + '<span style="font-size:9px;color:#1e3a5f;font-weight:600;">' + terbilang(invoice.total) + '</span>'
-      + '</div>'
-      + '</td></tr>'
-
-      // ===== NOTES =====
-      + (invoice.notes
-        ? '<tr><td colspan="2" style="border:none;padding:0;">' + notesHTML + '</td></tr>'
-        : '')
-
-      // ===== BANK INFO =====
-      + (bankHTML
-        ? '<tr><td colspan="2" style="border:none;padding:0;">' + bankHTML + '</td></tr>'
-        : '')
-
-      + '</table>'
-
-      // ===== SIGNATURE & STAMP (flexbox OUTSIDE main table — same approach as original working code) =====
-      + '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:36px;">'
-      // Left: Stamp
-      + '<div style="width:200px;text-align:center;">'
-      + (stampHTML
-        ? '<div>' + stampHTML + '</div>'
-        : '')
-      + '<p style="font-size:9px;color:#9ca3af;margin-top:4px;">Stempel Perusahaan</p>'
-      + '</div>'
-      // Right: Signature
-      + '<div style="width:200px;text-align:center;">'
-      + '<p style="font-size:10px;color:#6b7280;">Hormat kami,</p>'
-      + '<div style="margin-top:60px;border-top:1px solid #333;padding-top:8px;font-weight:700;font-size:11px;color:#1e3a5f;">' + companyName + '</div>'
-      + '</div>'
-      + '</div>'
-
-      // ===== FOOTER =====
-      + '<div style="text-align:center;margin-top:20px;padding-top:8px;border-top:1px solid #d0d5dd;">'
-      + '<p style="font-size:8px;color:#999;margin:0 0 2px 0;">Terima kasih atas kepercayaan Anda</p>'
-      + '<p style="font-size:7px;color:#bbb;margin:0;">' + companyName + (companyPhone ? '  |  ' + companyPhone : '') + (companyEmail ? '  |  ' + companyEmail : '') + '</p>'
-      + '</div>'
-
-      // ===== BOTTOM ACCENT BAR =====
-      + '<div style="height:5px;background:linear-gradient(90deg,#1e3a5f,#2c5282,#3182ce);margin-top:6px;border-radius:0;"></div>'
+      // ===== 5. FOOTER: STEMPEL (kiri) + TTD (kanan) — TABEL border:none =====
+      + '<table width="100%" style="border:none;">'
+      + '<tr>'
+      + '<td style="width:50%;text-align:left;border:none;vertical-align:top;">'
+      + '<div style="font-size:8pt;color:#888;">[Tempat Stempel Perusahaan]</div>'
+      + stampContentHTML
+      + '</td>'
+      + '<td style="width:50%;text-align:center;border:none;vertical-align:top;">'
+      + '<div style="font-size:8pt;color:#666;">' + signDate + '</div>'
+      + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:1px;">' + companyName + '</div>'
+      + '<div style="height:70px;"></div>'
+      + '<div style="border-bottom:1px solid #333;width:200px;margin:0 auto;"></div>'
+      + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:3px;">' + directorName + '</div>'
+      + '<div style="font-size:8pt;color:#666;">Direktur</div>'
+      + '</td>'
+      + '</tr></table>'
 
       + '</body></html>';
 
