@@ -417,7 +417,7 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:3px;">' + directorName + '</div>'
       + '<div style="font-size:8pt;color:#666;">Direktur</div>'
       // Stempel — overlay di area tanda tangan, pinggir kanan
-      + (stampImgURL ? '<img src="' + stampImgURL + '" style="position:absolute;bottom:10px;right:10px;height:85px;width:auto;opacity:0.8;" />' : '')
+      + (stampImgURL ? '<img src="' + stampImgURL + '" style="position:absolute;bottom:30px;right:10px;height:85px;width:auto;opacity:0.8;" />' : '')
       + '</div>'
 
       // ===== 6. CUSTOM FOOTER (pengganti browser footer) =====
