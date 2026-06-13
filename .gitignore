@@ -1,3 +1,8 @@
 tool-results/
 .next/
 node_modules/
+.env
+skills/
+upload/
+tool-results/
+*.pdf
