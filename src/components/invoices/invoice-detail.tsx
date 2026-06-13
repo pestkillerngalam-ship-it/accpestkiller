@@ -408,22 +408,17 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       + '</td>'
       + '</tr></table>'
 
-      // ===== 5. FOOTER: TTD (kiri) + STEMPEL (kanan, absolute bottom) =====
-      + '<div style="position:relative;width:100%;height:140px;">'
-      // Kiri: TTD — normal flow, menentukan tinggi container
-      + '<div style="width:50%;text-align:center;">'
+      // ===== 5. FOOTER: GABUNGAN TTD + STEMPEL — 1 kolom kanan =====
+      + '<div style="text-align:right;padding-right:30px;">'
       + '<div style="font-size:8pt;color:#666;">' + signDate + '</div>'
       + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:1px;">' + companyName + '</div>'
-      + '<div style="height:70px;"></div>'
-      + '<div style="border-bottom:1px solid #333;width:200px;margin:0 auto;"></div>'
+      // Area 70px — stempel menumpang di sini
+      + '<div style="height:70px;position:relative;">'
+      + (stampImgURL ? '<img src="' + stampImgURL + '" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:85px;width:auto;opacity:0.8;" />' : '')
+      + '</div>'
+      + '<div style="border-bottom:1px solid #333;width:200px;display:inline-block;"></div>'
       + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:3px;">' + directorName + '</div>'
       + '<div style="font-size:8pt;color:#666;">Direktur</div>'
-      + '</div>'
-      // Kanan: Stempel — position:absolute di bawah
-      + '<div style="position:absolute;bottom:0;right:0;width:50%;text-align:center;">'
-      + '<div style="font-size:8pt;color:#888;">[Tempat Stempel Perusahaan]</div>'
-      + (stampImgURL ? '<div style="height:70px;"><img src="' + stampImgURL + '" style="height:70px;width:auto;display:block;opacity:0.85;" /></div>' : '<div style="height:70px;"></div>')
-      + '</div>'
       + '</div>'
 
       // ===== 6. CUSTOM FOOTER (pengganti browser footer) =====
