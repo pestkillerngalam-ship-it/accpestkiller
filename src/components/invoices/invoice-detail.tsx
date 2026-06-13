@@ -449,41 +449,33 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
         ? '<tr><td colspan="2" style="border:none;padding:0;">' + bankHTML + '</td></tr>'
         : '')
 
-      // ===== SIGNATURE & STAMP (padding-top approach — most reliable in all print/PDF renderers) =====
-      // Both cells use padding-top so content bottom-edges end at the exact same Y position
-      // Left: 30px padding + 90px stamp = 120px from top
-      // Right: 36px padding + 14px hormat + 50px spacer + 20px name = 120px from top
-      + '<tr><td colspan="2" style="border:none;padding:0;">'
-      + '<table width="100%" style="margin-top:24px;border-collapse:collapse;">'
-      + '<tr>'
-      // Left: Stamp
-      + '<td width="50%" align="center" style="border:none;padding:30px 10px 0 0;">'
-      + (stampHTML
-        ? '<img src="' + (settings && settings.stamp ? settings.stamp : '') + '" style="height:90px;width:auto;opacity:0.85;" />'
-        : '')
-      + '</td>'
-      // Right: Signature
-      + '<td width="50%" align="center" style="border:none;padding:36px 0 0 10px;">'
-      + '<span style="font-size:9px;color:#888;">Hormat kami,</span>'
-      + '<div style="height:50px;"></div>'
-      + '<span style="display:inline-block;min-width:180px;border-top:1.5px solid #1e3a5f;padding-top:4px;font-size:11px;font-weight:700;color:#1e3a5f;">' + companyName + '</span>'
-      + '</td>'
-      + '</tr>'
       + '</table>'
-      + '</td></tr>'
+
+      // ===== SIGNATURE & STAMP (flexbox OUTSIDE main table — same approach as original working code) =====
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:36px;">'
+      // Left: Stamp
+      + '<div style="width:200px;text-align:center;">'
+      + (stampHTML
+        ? '<div>' + stampHTML + '</div>'
+        : '')
+      + '<p style="font-size:9px;color:#9ca3af;margin-top:4px;">Stempel Perusahaan</p>'
+      + '</div>'
+      // Right: Signature
+      + '<div style="width:200px;text-align:center;">'
+      + '<p style="font-size:10px;color:#6b7280;">Hormat kami,</p>'
+      + '<div style="margin-top:60px;border-top:1px solid #333;padding-top:8px;font-weight:700;font-size:11px;color:#1e3a5f;">' + companyName + '</div>'
+      + '</div>'
+      + '</div>'
 
       // ===== FOOTER =====
-      + '<tr><td colspan="2" style="border:none;padding:0;">'
-      + '<div style="text-align:center;margin-top:16px;padding-top:8px;border-top:1px solid #d0d5dd;">'
+      + '<div style="text-align:center;margin-top:20px;padding-top:8px;border-top:1px solid #d0d5dd;">'
       + '<p style="font-size:8px;color:#999;margin:0 0 2px 0;">Terima kasih atas kepercayaan Anda</p>'
       + '<p style="font-size:7px;color:#bbb;margin:0;">' + companyName + (companyPhone ? '  |  ' + companyPhone : '') + (companyEmail ? '  |  ' + companyEmail : '') + '</p>'
       + '</div>'
-      + '</td></tr>'
 
       // ===== BOTTOM ACCENT BAR =====
-      + '<tr><td colspan="2" style="height:5px;background:linear-gradient(90deg,#1e3a5f,#2c5282,#3182ce);border:none;padding:0;margin-top:6px;"></td></tr>'
+      + '<div style="height:5px;background:linear-gradient(90deg,#1e3a5f,#2c5282,#3182ce);margin-top:6px;border-radius:0;"></div>'
 
-      + '</table>'
       + '</body></html>';
 
     return html;
