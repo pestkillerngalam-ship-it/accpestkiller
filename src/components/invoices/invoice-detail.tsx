@@ -449,20 +449,28 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
         ? '<tr><td colspan="2" style="border:none;padding:0;">' + bankHTML + '</td></tr>'
         : '')
 
-      // ===== SIGNATURE & STAMP (synchronized with table, vertical-align:bottom) =====
+      // ===== SIGNATURE & STAMP (nested table + valign="bottom" for guaranteed sync) =====
       + '<tr><td colspan="2" style="border:none;padding:0;">'
       + '<table style="width:100%;border-collapse:collapse;margin-top:24px;">'
       + '<tr>'
-      // Left: Stamp
-      + '<td style="width:50%;vertical-align:bottom;text-align:center;border:none;padding:0 10px 0 0;height:120px;">'
+      // Left: Stamp — inner table forces valign="bottom" (HTML attr, most reliable in print)
+      + '<td style="width:50%;border:none;padding:0 10px 0 0;">'
+      + '<table style="width:100%;height:110px;border:none;"><tr>'
+      + '<td valign="bottom" align="center" style="border:none;padding:0;">'
       + (stampHTML
-        ? '<div style="display:inline-block;opacity:0.85;">' + stampHTML + '</div>'
+        ? '<img src="' + (settings && settings.stamp ? settings.stamp : '') + '" style="height:90px;width:auto;display:block;margin:0 auto;opacity:0.85;" />'
         : '')
       + '</td>'
-      // Right: Signature
-      + '<td style="width:50%;vertical-align:bottom;text-align:center;border:none;padding:0 0 0 10px;height:120px;">'
+      + '</tr></table>'
+      + '</td>'
+      // Right: Signature — same inner table structure, same height, same valign="bottom"
+      + '<td style="width:50%;border:none;padding:0 0 0 10px;">'
+      + '<table style="width:100%;height:110px;border:none;"><tr>'
+      + '<td valign="bottom" align="center" style="border:none;padding:0;">'
       + '<p style="font-size:9px;color:#888;margin:0 0 50px 0;">Hormat kami,</p>'
       + '<p style="font-size:11px;font-weight:700;color:#1e3a5f;margin:0;border-top:1.5px solid #1e3a5f;padding-top:4px;display:inline-block;min-width:180px;">' + companyName + '</p>'
+      + '</td>'
+      + '</tr></table>'
       + '</td>'
       + '</tr>'
       + '</table>'
