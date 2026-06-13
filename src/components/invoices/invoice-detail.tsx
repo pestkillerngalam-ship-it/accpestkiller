@@ -112,19 +112,22 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
     }
   }, [open, invoiceId]);
 
-  // Load preview iframe content
+  // Load preview iframe content — use setTimeout because Dialog needs time to render the iframe into DOM
   useEffect(() => {
     if (previewOpen && invoice) {
-      const iframe = document.getElementById('preview-iframe') as HTMLIFrameElement;
-      if (iframe) {
-        const html = generatePrintHTML();
-        const doc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (doc) {
-          doc.open();
-          doc.write(html);
-          doc.close();
+      const timer = setTimeout(() => {
+        const iframe = document.getElementById('preview-iframe') as HTMLIFrameElement;
+        if (iframe) {
+          const html = generatePrintHTML();
+          const doc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (doc) {
+            doc.open();
+            doc.write(html);
+            doc.close();
+          }
         }
-      }
+      }, 150);
+      return () => clearTimeout(timer);
     }
   }, [previewOpen, invoice]);
 
@@ -248,11 +251,11 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
     for (var i = 0; i < invoice.items.length; i++) {
       var item = invoice.items[i];
       itemsHTML += '<tr>';
-      itemsHTML += '<td style="text-align:center;padding:6px 6px;border-bottom:1px solid #e5e7eb;font-size:10px;">' + (i + 1) + '</td>';
-      itemsHTML += '<td style="padding:6px 6px;border-bottom:1px solid #e5e7eb;font-size:10px;">' + item.description + '</td>';
-      itemsHTML += '<td style="text-align:right;padding:6px 6px;border-bottom:1px solid #e5e7eb;font-size:10px;">' + item.qty + '</td>';
-      itemsHTML += '<td style="text-align:right;padding:6px 6px;border-bottom:1px solid #e5e7eb;font-size:10px;">' + formatCurrency(item.unitPrice) + '</td>';
-      itemsHTML += '<td style="text-align:right;padding:6px 6px;border-bottom:1px solid #e5e7eb;font-size:10px;">' + formatCurrency(item.total) + '</td>';
+      itemsHTML += '<td class="c">' + (i + 1) + '</td>';
+      itemsHTML += '<td>' + item.description + '</td>';
+      itemsHTML += '<td class="r">' + item.qty + '</td>';
+      itemsHTML += '<td class="r">' + formatCurrency(item.unitPrice) + '</td>';
+      itemsHTML += '<td class="r">' + formatCurrency(item.total) + '</td>';
       itemsHTML += '</tr>';
     }
 
@@ -331,11 +334,13 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       + '.info-table .val { color: #111827; font-weight: 500; }'
 
       // Items table
-      + '.items-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }'
+      + '.items-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; table-layout: fixed; }'
       + '.items-table thead th { background: #059669; color: white; padding: 6px 6px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }'
       + '.items-table thead th.r { text-align: right; }'
       + '.items-table thead th.c { text-align: center; }'
       + '.items-table tbody td { padding: 5px 6px; border-bottom: 1px solid #f3f4f6; font-size: 10px; color: #374151; }'
+      + '.items-table tbody td.r { text-align: right; }'
+      + '.items-table tbody td.c { text-align: center; }'
       + '.items-table tbody tr:nth-child(even) td { background: #f9fafb; }'
 
       // Totals section - right aligned
@@ -349,12 +354,12 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       + '.terbilang { background: #ecfdf5; border-left: 3px solid #059669; padding: 5px 10px; margin-bottom: 10px; font-size: 9px; color: #374151; }'
       + '.terbilang strong { color: #059669; }'
 
-      // Signature area - TABLE based for perfect alignment
-      + '.sign-table { width: 100%; margin-top: 16px; border: none; }'
-      + '.sign-table td { border: none; vertical-align: bottom; padding: 0; width: 50%; }'
-      + '.sign-table .sign-content { text-align: center; }'
-      + '.sign-table .sign-content p { font-size: 9px; color: #6b7280; margin: 0; }'
-      + '.sign-table .sign-content .sign-name { font-size: 11px; font-weight: 700; color: #111827; border-top: 1px solid #111827; padding-top: 4px; margin-top: 0; }'
+      // Signature area - absolute positioning for pixel-perfect alignment
+      + '.sign-area { position: relative; height: 120px; margin-top: 20px; }'
+      + '.sign-stamp { position: absolute; bottom: 0; left: 0; width: 50%; text-align: center; }'
+      + '.sign-sig { position: absolute; bottom: 0; right: 0; width: 50%; text-align: center; }'
+      + '.sign-sig .hormat { font-size: 9px; color: #6b7280; margin: 0 0 55px 0; }'
+      + '.sign-sig .sign-name { font-size: 11px; font-weight: 700; color: #111827; border-top: 1px solid #111827; padding-top: 4px; margin: 0; }'
 
       // Footer
       + '.footer { text-align: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e5e7eb; }'
@@ -444,22 +449,16 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       // Bank Info
       + bankHTML
 
-      // Signature & Stamp - using TABLE for guaranteed alignment
-      + '<table class="sign-table">'
-      + '<tr style="height:110px;">'
-      + '<td>'
-      + '<div class="sign-content">'
+      // Signature & Stamp - absolute positioning for guaranteed same baseline
+      + '<div class="sign-area">'
+      + '<div class="sign-stamp">'
       + (stampHTML ? stampHTML : '<div style="height:85px;"></div>')
       + '</div>'
-      + '</td>'
-      + '<td>'
-      + '<div class="sign-content">'
-      + '<p style="margin-bottom:60px;">Hormat kami,</p>'
+      + '<div class="sign-sig">'
+      + '<p class="hormat">Hormat kami,</p>'
       + '<p class="sign-name">' + companyName + '</p>'
       + '</div>'
-      + '</td>'
-      + '</tr>'
-      + '</table>'
+      + '</div>'
 
       // Footer
       + '<div class="footer">'
