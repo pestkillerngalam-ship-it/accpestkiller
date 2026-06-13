@@ -449,28 +449,24 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
         ? '<tr><td colspan="2" style="border:none;padding:0;">' + bankHTML + '</td></tr>'
         : '')
 
-      // ===== SIGNATURE & STAMP (nested table + valign="bottom" for guaranteed sync) =====
+      // ===== SIGNATURE & STAMP (padding-top approach — most reliable in all print/PDF renderers) =====
+      // Both cells use padding-top so content bottom-edges end at the exact same Y position
+      // Left: 30px padding + 90px stamp = 120px from top
+      // Right: 36px padding + 14px hormat + 50px spacer + 20px name = 120px from top
       + '<tr><td colspan="2" style="border:none;padding:0;">'
-      + '<table style="width:100%;border-collapse:collapse;margin-top:24px;">'
+      + '<table width="100%" style="margin-top:24px;border-collapse:collapse;">'
       + '<tr>'
-      // Left: Stamp — inner table forces valign="bottom" (HTML attr, most reliable in print)
-      + '<td style="width:50%;border:none;padding:0 10px 0 0;">'
-      + '<table style="width:100%;height:110px;border:none;"><tr>'
-      + '<td valign="bottom" align="center" style="border:none;padding:0;">'
+      // Left: Stamp
+      + '<td width="50%" align="center" style="border:none;padding:30px 10px 0 0;">'
       + (stampHTML
-        ? '<img src="' + (settings && settings.stamp ? settings.stamp : '') + '" style="height:90px;width:auto;display:block;margin:0 auto;opacity:0.85;" />'
+        ? '<img src="' + (settings && settings.stamp ? settings.stamp : '') + '" style="height:90px;width:auto;opacity:0.85;" />'
         : '')
       + '</td>'
-      + '</tr></table>'
-      + '</td>'
-      // Right: Signature — same inner table structure, same height, same valign="bottom"
-      + '<td style="width:50%;border:none;padding:0 0 0 10px;">'
-      + '<table style="width:100%;height:110px;border:none;"><tr>'
-      + '<td valign="bottom" align="center" style="border:none;padding:0;">'
-      + '<p style="font-size:9px;color:#888;margin:0 0 50px 0;">Hormat kami,</p>'
-      + '<p style="font-size:11px;font-weight:700;color:#1e3a5f;margin:0;border-top:1.5px solid #1e3a5f;padding-top:4px;display:inline-block;min-width:180px;">' + companyName + '</p>'
-      + '</td>'
-      + '</tr></table>'
+      // Right: Signature
+      + '<td width="50%" align="center" style="border:none;padding:36px 0 0 10px;">'
+      + '<span style="font-size:9px;color:#888;">Hormat kami,</span>'
+      + '<div style="height:50px;"></div>'
+      + '<span style="display:inline-block;min-width:180px;border-top:1.5px solid #1e3a5f;padding-top:4px;font-size:11px;font-weight:700;color:#1e3a5f;">' + companyName + '</span>'
       + '</td>'
       + '</tr>'
       + '</table>'
