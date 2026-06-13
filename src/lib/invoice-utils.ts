@@ -57,10 +57,10 @@ export function getDefaultDueDate(issueDate: string): string {
 }
 
 // Auto description for pest control
-export function getDefaultDescription(): string {
-  const now = new Date();
-  const bulan = now.toLocaleDateString('id-ID', { month: 'long' });
-  const tahun = now.getFullYear();
+export function getDefaultDescription(dateStr?: string): string {
+  const d = dateStr ? new Date(dateStr) : new Date();
+  const bulan = d.toLocaleDateString('id-ID', { month: 'long' });
+  const tahun = d.getFullYear();
   return `Jasa Pest Control Bulan ${bulan} ${tahun}`;
 }
 

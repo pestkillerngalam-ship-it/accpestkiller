@@ -241,7 +241,14 @@ export default function InvoiceForm({ open, onOpenChange, editId, customers, onS
                 const due = new Date(newIssueDate);
                 due.setDate(due.getDate() + 10);
                 const newDueDate = due.toISOString().split('T')[0];
-                setForm({ ...form, issueDate: newIssueDate, dueDate: newDueDate });
+                // Update deskripsi item pertama jika masih pakai pattern default
+                const desc = getDefaultDescription(newIssueDate);
+                const updatedItems = form.items.map((item, idx) =>
+                  idx === 0 && item.description.startsWith('Jasa Pest Control Bulan')
+                    ? { ...item, description: desc }
+                    : item
+                );
+                setForm({ ...form, issueDate: newIssueDate, dueDate: newDueDate, items: updatedItems });
               }} />
             </div>
             <div className="space-y-2">

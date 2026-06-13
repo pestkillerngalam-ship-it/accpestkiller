@@ -36,8 +36,9 @@ import {
   Download,
   X,
   Mail,
+  FileText,
 } from 'lucide-react';
-import { formatCurrency, formatDate, formatDateShort, hitungPajak } from '@/lib/invoice-utils';
+import { formatCurrency, formatDate, formatDateShort, hitungPajak, getDefaultDescription } from '@/lib/invoice-utils';
 import { terbilang } from '@/lib/terbilang';
 import { toast } from 'sonner';
 
@@ -429,6 +430,111 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
     return html;
   };
 
+  const generateKwitansiHTML = () => {
+    if (!invoice || !settings) return '';
+    var companyName = settings.companyName || 'PT Pest Killer Ngalam';
+    var companyAddress = settings.address || '';
+    var companyPhone = settings.phone || '';
+    var companyEmail = settings.email || '';
+    var directorName = settings.bankHolder || '';
+    var bankName = settings.bankName || '';
+    var bankAccount = settings.bankAccount || '';
+    var bankHolder = settings.bankHolder || '';
+    var stampImgURL = settings.stamp || '';
+    var logoHTML = settings.logo ? '<img src="' + settings.logo + '" style="height:40px;width:auto;" />' : '';
+
+    var itemsDesc = invoice.items.map(function(item) { return item.description; }).join(', ');
+    var kwitansiDate = formatDate(invoice.issueDate);
+    var signDate = 'Malang, ' + formatDate(invoice.issueDate);
+
+    var html = '<!DOCTYPE html><html><head><title></title>'
+      + '<style>'
+      + '@page{size:A4;margin:10mm 12mm 14mm 12mm;}'
+      + '*{box-sizing:border-box;margin:0;padding:0;}'
+      + 'body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#222;line-height:1.5;}'
+      + '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}'
+      + '</style></head><body>'
+
+      // ===== HEADER =====
+      + '<table width="100%" style="border-collapse:collapse;margin-bottom:15px;">'
+      + '<tr>'
+      + '<td style="vertical-align:top;padding:0;">'
+      + (logoHTML ? '<div style="margin-bottom:4px;">' + logoHTML + '</div>' : '')
+      + '<div style="font-size:13pt;font-weight:700;color:#1e3a5f;">' + companyName + '</div>'
+      + '<div style="font-size:8pt;color:#555;line-height:1.5;">'
+      + (companyAddress ? companyAddress + '<br/>' : '')
+      + (companyPhone ? 'Telp: ' + companyPhone : '')
+      + (companyPhone && companyEmail ? ' | ' : '')
+      + (companyEmail ? companyEmail : '')
+      + '</div>'
+      + '</td>'
+      + '</tr></table>'
+
+      // ===== JUDUL =====
+      + '<div style="text-align:center;margin-bottom:20px;">'
+      + '<div style="font-size:16pt;font-weight:700;color:#1e3a5f;letter-spacing:3px;text-decoration:underline;">KWITANSI</div>'
+      + '<div style="font-size:9pt;color:#555;margin-top:3px;">No: ' + invoice.invoiceNumber + '</div>'
+      + '</div>'
+
+      // ===== ISI KWITANSI =====
+      + '<div style="margin-bottom:15px;">'
+      + '<div style="margin-bottom:12px;">Telah diterima dari:</div>'
+
+      + '<table style="width:100%;border-collapse:collapse;margin-bottom:15px;">'
+      + '<tr><td style="width:120px;padding:3px 0;color:#555;">Perusahaan</td><td style="padding:3px 0;font-weight:600;">: ' + invoice.customer.companyName + '</td></tr>'
+      + '<tr><td style="padding:3px 0;color:#555;">PIC</td><td style="padding:3px 0;">: ' + invoice.customer.pic + '</td></tr>'
+      + '<tr><td style="padding:3px 0;color:#555;">Alamat</td><td style="padding:3px 0;">: ' + (invoice.customer.address || '-') + '</td></tr>'
+      + '</table>'
+
+      + '<div style="margin-bottom:8px;">Uang sejumlah:</div>'
+      + '<div style="font-size:13pt;font-weight:700;color:#1e3a5f;margin-bottom:4px;">Rp ' + formatCurrency(invoice.total) + '</div>'
+      + '<div style="font-size:9pt;font-style:italic;color:#444;margin-bottom:15px;">(' + terbilang(invoice.total) + ')</div>'
+
+      + '<div style="margin-bottom:8px;">Untuk pembayaran:</div>'
+      + '<div style="border:1px solid #d0d0d0;padding:8px 12px;margin-bottom:15px;background:#fafafa;">'
+      + '<div style="font-size:9pt;color:#333;">' + itemsDesc + '</div>'
+      + (invoice.taxInvoiceNumber ? '<div style="font-size:8pt;color:#666;margin-top:4px;">Faktur Pajak: ' + invoice.taxInvoiceNumber + '</div>' : '')
+      + '<div style="font-size:8pt;color:#666;margin-top:2px;">Invoice: ' + invoice.invoiceNumber + ' tanggal ' + kwitansiDate + '</div>'
+      + '</div>'
+
+      + '<div style="margin-bottom:8px;">Pembayaran melalui:</div>'
+      + '<table style="border-collapse:collapse;">'
+      + '<tr><td style="padding:2px 0;color:#555;">Bank</td><td style="padding:2px 0;font-weight:600;">: ' + bankName + '</td></tr>'
+      + '<tr><td style="padding:2px 0;color:#555;">No. Rekening</td><td style="padding:2px 0;">: ' + bankAccount + '</td></tr>'
+      + '<tr><td style="padding:2px 0;color:#555;">a.n.</td><td style="padding:2px 0;">: ' + bankHolder + '</td></tr>'
+      + '</table>'
+      + '</div>'
+
+      // ===== TTD =====
+      + '<div style="text-align:right;padding-right:20px;">'
+      + '<div style="font-size:8pt;color:#666;">' + signDate + '</div>'
+      + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:1px;">' + companyName + '</div>'
+      + (stampImgURL
+        ? '<div style="height:85px;text-align:right;margin-top:2px;"><img src="' + stampImgURL + '" style="height:85px;width:auto;opacity:0.85;" /></div>'
+        : '<div style="height:85px;"></div>')
+      + '<div style="border-bottom:1px solid #333;width:200px;display:inline-block;"></div>'
+      + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:3px;">' + directorName + '</div>'
+      + '<div style="font-size:8pt;color:#666;">Direktur</div>'
+      + '</div>'
+
+      + '<div style="text-align:center;font-size:7pt;color:#999;margin-top:15px;">pestkiller.netlify.app</div>'
+
+      + '</body></html>';
+    return html;
+  };
+
+  const handlePrintKwitansi = () => {
+    const html = generateKwitansiHTML();
+    if (!html) return;
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => {
+      win.print();
+    }, 1000);
+  };
+
   const handlePrint = () => {
     const html = generatePrintHTML();
     const win = window.open('', '_blank');
@@ -793,6 +899,13 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
                   <div className="text-left">
                     <p className="font-medium">Kirim via Email</p>
                     <p className="text-xs text-blue-100">Buka email client</p>
+                  </div>
+                </Button>
+                <Button onClick={handlePrintKwitansi} className="h-20 bg-amber-600 hover:bg-amber-700 text-white">
+                  <FileText className="w-8 h-8 mr-3" />
+                  <div className="text-left">
+                    <p className="font-medium">Cetak Kwitansi</p>
+                    <p className="text-xs text-amber-100">Kwitansi pembayaran</p>
                   </div>
                 </Button>
               </div>
