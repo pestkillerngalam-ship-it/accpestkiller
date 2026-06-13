@@ -326,7 +326,7 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
     // ==================== 1-LEMBAR A4: INVOICE & FAKTUR PAJAK GABUNGAN ====================
     var html = '<!DOCTYPE html><html><head><title></title>'
       + '<style>'
-      + '@page{size:A4;margin:10mm 12mm;}'
+      + '@page{size:A4;margin:8mm 12mm 14mm 12mm;}'
       + '*{box-sizing:border-box;margin:0;padding:0;}'
       + 'body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#222;line-height:1.4;}'
       + '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}'
@@ -412,22 +412,26 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       + '</td>'
       + '</tr></table>'
 
-      // ===== 5. FOOTER: STEMPEL (kiri) + TTD (kanan) — TABEL border:none =====
-      + '<table width="100%" style="border:none;">'
-      + '<tr>'
-      + '<td style="width:50%;text-align:left;border:none;vertical-align:bottom;">'
+      // ===== 5. FOOTER: STEMPEL (kiri) + TTD (kanan) — position:absolute =====
+      + '<div style="position:relative;width:100%;height:140px;">'
+      // Kiri: Stempel — position:absolute di bawah
+      + '<div style="position:absolute;bottom:0;left:0;width:50%;text-align:center;">'
       + '<div style="font-size:8pt;color:#888;">[Tempat Stempel Perusahaan]</div>'
       + stampContentHTML
-      + '</td>'
-      + '<td style="width:50%;text-align:center;border:none;vertical-align:top;">'
+      + '</div>'
+      // Kanan: TTD — normal flow, menentukan tinggi container
+      + '<div style="margin-left:50%;text-align:center;">'
       + '<div style="font-size:8pt;color:#666;">' + signDate + '</div>'
       + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:1px;">' + companyName + '</div>'
       + '<div style="height:70px;"></div>'
       + '<div style="border-bottom:1px solid #333;width:200px;margin:0 auto;"></div>'
       + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:3px;">' + directorName + '</div>'
       + '<div style="font-size:8pt;color:#666;">Direktur</div>'
-      + '</td>'
-      + '</tr></table>'
+      + '</div>'
+      + '</div>'
+
+      // ===== 6. CUSTOM FOOTER (pengganti browser footer) =====
+      + '<div style="text-align:center;font-size:7pt;color:#999;margin-top:4px;">pestkiller.netlify.app</div>'
 
       + '</body></html>';
 
