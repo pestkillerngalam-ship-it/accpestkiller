@@ -313,15 +313,11 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       notesHTML = '<p style="font-size:8pt;color:#666;margin:4px 0 0 0;"><b>Catatan:</b> ' + invoice.notes + '</p>';
     }
 
-    // ========== STAMP CONTENT ==========
-    var stampContentHTML = '';
+    // ========== STAMP IMAGE URL ==========
+    var stampImgURL = '';
     if (settings && settings.stamp) {
-      stampContentHTML = '<div style="height:70px;"><img src="' + settings.stamp + '" style="height:70px;width:auto;display:block;opacity:0.85;" /></div>';
-    } else {
-      stampContentHTML = '<div style="height:70px;"></div>';
+      stampImgURL = settings.stamp;
     }
-    // Extra spacer to match right column height (name+director+line below 70px space)
-    stampContentHTML += '<div style="height:30px;"></div>';
 
     // ==================== 1-LEMBAR A4: INVOICE & FAKTUR PAJAK GABUNGAN ====================
     var html = '<!DOCTYPE html><html><head><title></title>'
@@ -412,21 +408,21 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       + '</td>'
       + '</tr></table>'
 
-      // ===== 5. FOOTER: STEMPEL (kiri) + TTD (kanan) — position:absolute =====
+      // ===== 5. FOOTER: TTD (kiri) + STEMPEL (kanan, absolute bottom) =====
       + '<div style="position:relative;width:100%;height:140px;">'
-      // Kiri: Stempel — position:absolute di bawah
-      + '<div style="position:absolute;bottom:0;left:0;width:50%;text-align:center;">'
-      + '<div style="font-size:8pt;color:#888;">[Tempat Stempel Perusahaan]</div>'
-      + stampContentHTML
-      + '</div>'
-      // Kanan: TTD — normal flow, menentukan tinggi container
-      + '<div style="margin-left:50%;text-align:center;">'
+      // Kiri: TTD — normal flow, menentukan tinggi container
+      + '<div style="width:50%;text-align:center;">'
       + '<div style="font-size:8pt;color:#666;">' + signDate + '</div>'
       + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:1px;">' + companyName + '</div>'
       + '<div style="height:70px;"></div>'
       + '<div style="border-bottom:1px solid #333;width:200px;margin:0 auto;"></div>'
       + '<div style="font-size:9pt;font-weight:700;color:#333;margin-top:3px;">' + directorName + '</div>'
       + '<div style="font-size:8pt;color:#666;">Direktur</div>'
+      + '</div>'
+      // Kanan: Stempel — position:absolute di bawah
+      + '<div style="position:absolute;bottom:0;right:0;width:50%;text-align:center;">'
+      + '<div style="font-size:8pt;color:#888;">[Tempat Stempel Perusahaan]</div>'
+      + (stampImgURL ? '<div style="height:70px;"><img src="' + stampImgURL + '" style="height:70px;width:auto;display:block;opacity:0.85;" /></div>' : '<div style="height:70px;"></div>')
       + '</div>'
       + '</div>'
 
