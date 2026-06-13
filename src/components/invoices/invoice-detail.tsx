@@ -320,9 +320,11 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
     } else {
       stampContentHTML = '<div style="height:70px;"></div>';
     }
+    // Extra spacer to match right column height (name+director+line below 70px space)
+    stampContentHTML += '<div style="height:30px;"></div>';
 
     // ==================== 1-LEMBAR A4: INVOICE & FAKTUR PAJAK GABUNGAN ====================
-    var html = '<!DOCTYPE html><html><head><title>' + docTitle + '</title>'
+    var html = '<!DOCTYPE html><html><head><title></title>'
       + '<style>'
       + '@page{size:A4;margin:10mm 12mm;}'
       + '*{box-sizing:border-box;margin:0;padding:0;}'
@@ -413,7 +415,7 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       // ===== 5. FOOTER: STEMPEL (kiri) + TTD (kanan) — TABEL border:none =====
       + '<table width="100%" style="border:none;">'
       + '<tr>'
-      + '<td style="width:50%;text-align:left;border:none;vertical-align:top;">'
+      + '<td style="width:50%;text-align:left;border:none;vertical-align:bottom;">'
       + '<div style="font-size:8pt;color:#888;">[Tempat Stempel Perusahaan]</div>'
       + stampContentHTML
       + '</td>'
