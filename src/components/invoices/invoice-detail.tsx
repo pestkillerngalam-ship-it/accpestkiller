@@ -246,16 +246,16 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       fakturInfoHTML += '<tr><td style="padding:2px 0;color:#666;">Tgl. Faktur Pajak</td><td style="padding:2px 0;">' + formatDate(invoice.taxInvoiceDate) + '</td></tr>';
     }
 
-    // Bangun baris item table
+    // Bangun baris item table (ALL inline styles untuk jaminan print/PDF)
     var itemsHTML = '';
     for (var i = 0; i < invoice.items.length; i++) {
       var item = invoice.items[i];
       itemsHTML += '<tr>';
-      itemsHTML += '<td class="c">' + (i + 1) + '</td>';
-      itemsHTML += '<td>' + item.description + '</td>';
-      itemsHTML += '<td class="r">' + item.qty + '</td>';
-      itemsHTML += '<td class="r">' + formatCurrency(item.unitPrice) + '</td>';
-      itemsHTML += '<td class="r">' + formatCurrency(item.total) + '</td>';
+      itemsHTML += '<td style="text-align:center;padding:6px 6px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#374151;">' + (i + 1) + '</td>';
+      itemsHTML += '<td style="padding:6px 6px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#374151;">' + item.description + '</td>';
+      itemsHTML += '<td style="text-align:right;padding:6px 6px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#374151;">' + item.qty + '</td>';
+      itemsHTML += '<td style="text-align:right;padding:6px 6px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#374151;">' + formatCurrency(item.unitPrice) + '</td>';
+      itemsHTML += '<td style="text-align:right;padding:6px 6px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#374151;">' + formatCurrency(item.total) + '</td>';
       itemsHTML += '</tr>';
     }
 
@@ -449,16 +449,16 @@ export default function InvoiceDetail({ open, onOpenChange, invoiceId, onRefresh
       // Bank Info
       + bankHTML
 
-      // Signature & Stamp - absolute positioning for guaranteed same baseline
-      + '<div class="sign-area">'
-      + '<div class="sign-stamp">'
-      + (stampHTML ? stampHTML : '<div style="height:85px;"></div>')
-      + '</div>'
-      + '<div class="sign-sig">'
-      + '<p class="hormat">Hormat kami,</p>'
-      + '<p class="sign-name">' + companyName + '</p>'
-      + '</div>'
-      + '</div>'
+      // Signature & Stamp - table with inline styles, guaranteed bottom alignment
+      + '<table style="width:100%;border:none;margin-top:20px;"><tr style="height:100px;">'
+      + '<td style="width:50%;vertical-align:bottom;text-align:center;border:none;padding:0;">'
+      + (stampHTML ? stampHTML : '<div style="height:80px;"></div>')
+      + '</td>'
+      + '<td style="width:50%;vertical-align:bottom;text-align:center;border:none;padding:0;">'
+      + '<p style="font-size:9px;color:#6b7280;margin:0 0 55px 0;">Hormat kami,</p>'
+      + '<p style="font-size:11px;font-weight:700;color:#111827;border-top:1px solid #111827;padding-top:4px;margin:0;">' + companyName + '</p>'
+      + '</td>'
+      + '</tr></table>'
 
       // Footer
       + '<div class="footer">'
