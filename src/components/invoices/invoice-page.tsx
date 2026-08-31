@@ -149,20 +149,54 @@ export default function InvoicePage() {
       const res = await fetch(`/api/invoices/${id}/pdf`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error('Gagal menghasilkan PDF');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${invoiceNumber || id}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast.success('Download dimulai');
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${invoiceNumber || id}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        toast.success('Download dimulai');
+        return;
+      }
+      console.warn('PDF endpoint returned non-OK, falling back to HTML');
     } catch (err) {
-      console.error(err);
-      toast.error('Gagal download PDF');
+      console.warn('PDF generation failed, will fallback to HTML', err);
+    }
+
+    // Fallback: open a new tab first (to reduce popup blocking), then load HTML and print
+    try {
+      const win = window.open('', '_blank', 'noopener,noreferrer');
+      if (!win) {
+        toast.error('Tidak bisa membuka jendela baru (pop-up diblokir)');
+        return;
+      }
+      win.document.title = invoiceNumber ? `Invoice ${invoiceNumber}` : 'Invoice';
+
+      const resHtml = await fetch(`/api/invoices/${id}/pdf-html`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resHtml.ok) {
+        win.document.body.innerText = 'Gagal memuat invoice. Silakan coba lagi.';
+        toast.error('Gagal memuat fallback HTML');
+        return;
+      }
+      const html = await resHtml.text();
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+
+      setTimeout(() => {
+        try { win.print(); } catch (e) { /* ignore */ }
+      }, 500);
+
+      toast.success('Versi cetak invoice terbuka di tab baru');
+    } catch (err) {
+      console.error('Fallback HTML error', err);
+      toast.error('Gagal menyiapkan fallback PDF/HTML');
     }
   };
 
